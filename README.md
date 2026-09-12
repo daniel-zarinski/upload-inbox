@@ -76,6 +76,7 @@ The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every
 - Updating: `az containerapp update -n upload-inbox -g upload-inbox --image ghcr.io/daniel-zarinski/upload-inbox-server:latest`. Container Apps doesn't re-pull `latest` by itself.
 - First request after idle takes a few seconds while the container wakes.
 - Cost: idle compute is near zero, storage is cents, egress to your house is about $0.10/GB.
+- Health check: `curl -I -X OPTIONS https://<app-url>/files/` returns `Tus-Resumable: 1.0.0`. `/files/` is the tus API the browser uploads to; the root URL is just the page.
 - Logs: `az containerapp logs show -n upload-inbox -g upload-inbox --follow`.
 
 ## Day to day

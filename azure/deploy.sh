@@ -47,6 +47,7 @@ cat > LINKS.md <<OUT
 # upload-inbox on Azure
 
 - [Upload page](https://$FQDN)
+- tus API: https://$FQDN/files/ (what the uploader talks to; `curl -I -X OPTIONS` on it returns Tus-Resumable headers when the app is healthy)
 - [Browse uploaded files]($P/providers/Microsoft.Storage/storageAccounts/$SA/fileList) (File shares → $SHARE)
 - [Container app]($P/providers/Microsoft.App/containerApps/$RG)
 - [Container app logs]($P/providers/Microsoft.App/containerApps/$RG/logstream)
