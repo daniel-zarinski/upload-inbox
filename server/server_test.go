@@ -142,3 +142,69 @@ func TestRejectsOversizeAndNoDownload(t *testing.T) {
 		t.Fatal("download of in-progress upload must be disabled")
 	}
 }
+
+// Parallel upload: two partial uploads concatenated into one final. Only the
+// final is stored, bytes are part1+part2, and the parts are cleaned up.
+func TestConcatUpload(t *testing.T) {
+	inbox := t.TempDir()
+	done := make(chan string, 4)
+	srv, err := newServer(inbox, done)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	parts := [][]byte{make([]byte, 1_000_000), make([]byte, 700_000)}
+	var locs []string
+	for _, p := range parts {
+		rand.Read(p)
+		res := tusReq(t, "POST", ts.URL+"/files/", nil, map[string]string{
+			"Upload-Length": strconv.Itoa(len(p)),
+			"Upload-Concat": "partial",
+		})
+		if res.StatusCode != 201 {
+			t.Fatalf("create partial: %d", res.StatusCode)
+		}
+		loc := res.Header.Get("Location")
+		locs = append(locs, loc)
+		if c := tusReq(t, "PATCH", loc, p, map[string]string{
+			"Upload-Offset": "0",
+			"Content-Type":  "application/offset+octet-stream",
+		}).StatusCode; c != 204 {
+			t.Fatalf("patch partial: %d", c)
+		}
+	}
+	res := tusReq(t, "POST", ts.URL+"/files/", nil, map[string]string{
+		"Upload-Concat":   "final;" + locs[0] + " " + locs[1],
+		"Upload-Metadata": "filename " + b64("clip.mp4"),
+	})
+	if res.StatusCode != 201 {
+		t.Fatalf("create final: %d", res.StatusCode)
+	}
+
+	var out string
+	select {
+	case out = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("final never stored")
+	}
+	if out == "" {
+		t.Fatal("store failed")
+	}
+	select {
+	case extra := <-done:
+		t.Fatalf("partial upload was stored on its own: %q", extra)
+	case <-time.After(200 * time.Millisecond):
+	}
+	got, _ := os.ReadFile(out)
+	if !bytes.Equal(got, append(append([]byte{}, parts[0]...), parts[1]...)) {
+		t.Fatal("stored bytes != part1+part2")
+	}
+	left, _ := os.ReadDir(filepath.Join(inbox, ".tusd-partial"))
+	for _, e := range left {
+		if !e.IsDir() {
+			t.Fatalf("partial dir not cleaned: %s", e.Name())
+		}
+	}
+}
