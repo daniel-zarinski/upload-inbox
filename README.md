@@ -12,7 +12,7 @@ A public, write-only drop box for photos and videos. Anyone with the link can up
 
 - Backend: one Go binary embedding [tusd](https://github.com/tus/tusd) (resumable, chunked uploads). 500 MB max per file.
 - Frontend: React + [Uppy](https://uppy.io). Mobile first, resumes after a dropped connection.
-- Exposure: Cloudflare Tunnel. 90 MB chunks stay under the free tier's 100 MB request cap; files over 100 MB upload as 3 parallel parts.
+- Exposure: Cloudflare Tunnel. 90 MB chunks stay under the free tier's 100 MB request cap; files over 40 MB upload as 4 parallel parts (one per cloudflared HA connection).
 - Language: follows the browser (all Uppy locale packs), or force one with `?lang=fr`.
 
 ## Unraid setup
