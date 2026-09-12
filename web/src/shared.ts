@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import Uppy, { type UppyFile, type Meta, type Body } from '@uppy/core'
 import Tus from '@uppy/tus'
+import GoldenRetriever from '@uppy/golden-retriever'
 import { useMotionValue, useSpring } from 'motion/react'
 
 export const MB = 1024 * 1024
@@ -19,11 +20,11 @@ export function makeUppy() {
     restrictions: { allowedFileTypes: ['image/*', 'video/*'], maxFileSize: MAX },
   }).use(Tus, {
     endpoint: '/files/',
-    chunkSize: 90 * MB, // Cloudflare free tier caps a request body at 100 MB
+    chunkSize: 40 * MB, // under Cloudflare's 100 MB body cap; also caps progress lost when a phone suspends the tab mid-chunk
     limit: 3,
     retryDelays: [0, 1000, 3000, 5000],
     allowedMetaFields: ['name', 'type'], // @uppy/tus maps name→filename, type→filetype
-  })
+  }).use(GoldenRetriever, { serviceWorker: false }) // reload/tab eviction restores the list; tus uploadUrl is persisted so parts resume
   // Files >40 MB get 4 parallel partial uploads (tus concat), one per cloudflared HA connection; a single stream is the choke point.
   // Photos stay 1 POST + 1 PATCH.
   uppy.on('file-added', (f) => {
