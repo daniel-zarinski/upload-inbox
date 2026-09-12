@@ -22,7 +22,7 @@ export function Tile({ file, uppy, locked, hidden, delay, onOpen }: { file: F; u
   const tilt = Math.round(delay / STAGGER) % 2 ? 8 : -8
 
   return (
-    <motion.div layout className={`tile ${state}`} initial={{ y: 56, scale: 0.7, rotate: tilt, opacity: 0 }} animate={{ y: 0, scale: 1, rotate: 0, opacity: 1, transition: { ...bouncy, delay } }} exit={pop} transition={spring} whileTap={{ scale: 0.97 }}
+    <motion.div layoutId={`${file.id}-tile`} className={`tile ${state}`} initial={{ y: 56, scale: 0.7, rotate: tilt, opacity: 0 }} animate={{ y: 0, scale: 1, rotate: 0, opacity: 1, transition: { ...bouncy, delay } }} exit={pop} transition={spring} whileTap={{ scale: 0.97 }}
       onClick={() => onOpen({ id: file.id, url, video })}>
       {!hidden && (video
         ? <motion.video layoutId={file.id} src={url} muted playsInline preload="metadata" onLoadedMetadata={(e) => setDur(e.currentTarget.duration)} transition={zoom} />
