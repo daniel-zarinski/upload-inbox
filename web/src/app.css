@@ -103,7 +103,8 @@ input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; po
   background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; z-index: 2;
   box-shadow: 0 6px 22px color-mix(in oklch, var(--accent) 40%, transparent); }
 .fab.idle { --fab: 116px; bottom: calc(96px + 26px + env(safe-area-inset-bottom)); }
-.fab.ready, .fab.sending, .fab.sending { background: var(--ink); color: var(--bg); box-shadow: none; }
+.fab.ready, .fab.sending, .fab.done { --fab: 96px; bottom: calc(20px + env(safe-area-inset-bottom)); }
+.fab.sending { background: var(--ink); color: var(--bg); box-shadow: none; }
 .fab.sending.failed { background: var(--error); color: #fff; }
 .fab:disabled { background: var(--disabled); color: var(--disabled-ink); box-shadow: none; }
 .fab-icon { display: grid; place-items: center; }
