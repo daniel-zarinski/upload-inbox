@@ -24,7 +24,8 @@ type Rejected = { id: string; reason: 'size' | 'type' }
 
 function Inbox({ uppy }: { uppy: Uppy }) {
   const files = useUppyState(uppy, (s) => s.files)
-  const list = Object.values(files) as F[]
+  // ponytail: Safari drops picker File blobs on eviction, Golden Retriever restores those as ghosts we can't resume. Hide them.
+  const list = (Object.values(files) as F[]).filter((f) => !f.isGhost)
   const [busy, setBusy] = useState(false)
   const [paused, setPaused] = useState(false)
   const [rejected, setRejected] = useState<Rejected[]>([])
@@ -38,9 +39,22 @@ function Inbox({ uppy }: { uppy: Uppy }) {
       const reason: Rejected['reason'] = (f?.size ?? 0) > MAX ? 'size' : 'type'
       setRejected((r) => [...r, { id: `${Date.now()}-${r.length}`, reason }])
     }
-    uppy.on('upload', onUpload); uppy.on('complete', onComplete); uppy.on('restriction-failed', onReject)
-    return () => { uppy.off('upload', onUpload); uppy.off('complete', onComplete); uppy.off('restriction-failed', onReject) }
+    const onRestored = () => {
+      const fs = Object.values(uppy.getState().files)
+      if (fs.some((f) => f.progress.uploadStarted && !f.progress.uploadComplete && !f.isGhost)) { setBusy(true); uppy.resumeAll() }
+    }
+    uppy.on('upload', onUpload); uppy.on('complete', onComplete); uppy.on('restriction-failed', onReject); uppy.on('restored', onRestored)
+    return () => { uppy.off('upload', onUpload); uppy.off('complete', onComplete); uppy.off('restriction-failed', onReject); uppy.off('restored', onRestored) }
   }, [uppy])
+
+  // Keep the screen on while sending: a locked phone suspends the tab. The OS drops the lock when the tab hides, so re-take it on return.
+  useEffect(() => {
+    if (!(busy && !paused) || !navigator.wakeLock) return
+    let lock: WakeLockSentinel | null = null
+    const take = () => { if (document.visibilityState === 'visible') navigator.wakeLock.request('screen').then((l) => { lock = l }).catch(() => {}) }
+    take(); document.addEventListener('visibilitychange', take)
+    return () => { document.removeEventListener('visibilitychange', take); lock?.release().catch(() => {}) }
+  }, [busy, paused])
 
   const drop = useDropzone(useMemo(() => ({ noClick: true, onDragEnter: () => setDragging(true), onDragLeave: () => setDragging(false), onDrop: () => setDragging(false) }), []))
   const input = useFileInput()
