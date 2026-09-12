@@ -47,15 +47,6 @@ function Inbox({ uppy }: { uppy: Uppy }) {
     return () => { uppy.off('upload', onUpload); uppy.off('complete', onComplete); uppy.off('restriction-failed', onReject); uppy.off('restored', onRestored) }
   }, [uppy])
 
-  // Keep the screen on while sending: a locked phone suspends the tab. The OS drops the lock when the tab hides, so re-take it on return.
-  useEffect(() => {
-    if (!(busy && !paused) || !navigator.wakeLock) return
-    let lock: WakeLockSentinel | null = null
-    const take = () => { if (document.visibilityState === 'visible') navigator.wakeLock.request('screen').then((l) => { lock = l }).catch(() => {}) }
-    take(); document.addEventListener('visibilitychange', take)
-    return () => { document.removeEventListener('visibilitychange', take); lock?.release().catch(() => {}) }
-  }, [busy, paused])
-
   const drop = useDropzone(useMemo(() => ({ noClick: true, onDragEnter: () => setDragging(true), onDragLeave: () => setDragging(false), onDrop: () => setDragging(false) }), []))
   const input = useFileInput()
 
@@ -75,6 +66,21 @@ function Inbox({ uppy }: { uppy: Uppy }) {
   const failFrac = useSmooth((sent + failedLeft) / (total || 1))
 
   const failed = phase === 'sending' && !busy && anyError
+
+  // Keep the screen on while sending: a locked phone suspends the tab. The OS drops the lock when the tab hides, so re-take it on return.
+  useEffect(() => {
+    if (!(busy && !paused) && !failed) return
+    let lock: WakeLockSentinel | null = null
+    // Coming back also retries anything that errored while the tab was frozen, so the return trip is hands-off.
+    const take = () => {
+      if (document.visibilityState !== 'visible') return
+      navigator.wakeLock?.request('screen').then((l) => { lock = l }).catch(() => {})
+      if (Object.values(uppy.getState().files).some((f) => f.error)) uppy.retryAll()
+    }
+    take(); document.addEventListener('visibilitychange', take)
+    return () => { document.removeEventListener('visibilitychange', take); lock?.release().catch(() => {}) }
+  }, [uppy, busy, paused, failed])
+
   const reset = () => { uppy.clear(); setRejected([]); setBusy(false); setPaused(false) }
   const fabClick = phase === 'idle' ? input.getButtonProps().onClick : phase === 'ready' ? () => uppy.upload() : phase === 'done' ? () => { reset(); input.getButtonProps().onClick() }
     : () => { if (failed) { uppy.retryAll(); return } paused ? uppy.resumeAll() : uppy.pauseAll(); setPaused(!paused) }
