@@ -84,7 +84,7 @@ function Inbox({ uppy }: { uppy: Uppy }) {
             </div>
             <div className="grid">
               <AnimatePresence>
-                {list.map((f) => <Tile key={f.id} file={f} uppy={uppy} locked={phase !== 'ready'} hidden={open?.id === f.id} delay={delayOf(f.id)} onOpen={setOpen} />)}
+                {list.map((f) => <Tile key={f.id} file={f} uppy={uppy} locked={phase !== 'ready'} delay={delayOf(f.id)} onOpen={setOpen} />)}
                 {rejected.map((r) => <RejectedTile key={r.id} reason={r.reason} delay={delayOf(r.id)} onDismiss={() => setRejected((x) => x.filter((y) => y.id !== r.id))} />)}
                 {phase === 'ready' && (
                   <motion.button key="add" layout className="add" aria-label="Add more" {...input.getButtonProps()}
@@ -98,16 +98,19 @@ function Inbox({ uppy }: { uppy: Uppy }) {
         )}
       </AnimatePresence>
 
-      {/* Preview: the tile's media and this one share a layoutId, so Motion animates it to full size and back. Drag down to dismiss. */}
+      {/* Preview: the tile card and this card share a layoutId, so the whole tile flies to full size and back. Drag down to dismiss. */}
       <AnimatePresence>
         {open && (
-          <motion.div key="lightbox" className="lightbox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(null)}>
-            {open.video
-              ? <motion.video layoutId={open.id} src={open.url} controls autoPlay playsInline transition={zoom} onClick={(e) => e.stopPropagation()}
-                  drag="y" dragConstraints={{ top: 0, bottom: 0 }} dragElastic={0.6} onDragEnd={(_, i) => { if (Math.abs(i.offset.y) > 100) setOpen(null) }} />
-              : <motion.img layoutId={open.id} src={open.url} alt="" transition={zoom}
-                  drag="y" dragConstraints={{ top: 0, bottom: 0 }} dragElastic={0.6} onDragEnd={(_, i) => { if (Math.abs(i.offset.y) > 100) setOpen(null) }} />}
-          </motion.div>
+          <div key="lightbox" className="lightbox" onClick={() => setOpen(null)}>
+            {/* Scrim fades on its own; the card must not fade or the flight back to the grid is cut short. */}
+            <motion.div className="scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+            <motion.div layoutId={`${open.id}-tile`} className="lightbox-card" transition={zoom}
+              drag="y" dragConstraints={{ top: 0, bottom: 0 }} dragElastic={0.6} onDragEnd={(_, i) => { if (Math.abs(i.offset.y) > 100) setOpen(null) }}>
+              {open.video
+                ? <motion.video layout src={open.url} controls autoPlay playsInline transition={zoom} onClick={(e) => e.stopPropagation()} />
+                : <motion.img layout src={open.url} alt="" transition={zoom} />}
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

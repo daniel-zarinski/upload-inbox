@@ -13,7 +13,7 @@ function useObjectURL(file: F): string {
   return ref.current
 }
 
-export function Tile({ file, uppy, locked, hidden, delay, onOpen }: { file: F; uppy: Uppy; locked: boolean; hidden: boolean; delay: number; onOpen: (o: Open) => void }) {
+export function Tile({ file, uppy, locked, delay, onOpen }: { file: F; uppy: Uppy; locked: boolean; delay: number; onOpen: (o: Open) => void }) {
   const url = useObjectURL(file)
   const video = !!file.type?.startsWith('video/')
   const [dur, setDur] = useState<number | null>(null)
@@ -22,11 +22,11 @@ export function Tile({ file, uppy, locked, hidden, delay, onOpen }: { file: F; u
   const tilt = Math.round(delay / STAGGER) % 2 ? 8 : -8
 
   return (
-    <motion.div layout className={`tile ${state}`} initial={{ y: 56, scale: 0.7, rotate: tilt, opacity: 0 }} animate={{ y: 0, scale: 1, rotate: 0, opacity: 1, transition: { ...bouncy, delay } }} exit={pop} transition={spring} whileTap={{ scale: 0.97 }}
+    <motion.div layoutId={`${file.id}-tile`} className={`tile ${state}`} initial={{ y: 56, scale: 0.7, rotate: tilt, opacity: 0 }} animate={{ y: 0, scale: 1, rotate: 0, opacity: 1, transition: { ...bouncy, delay } }} exit={pop} transition={spring} whileTap={{ scale: 0.97 }}
       onClick={() => onOpen({ id: file.id, url, video })}>
-      {!hidden && (video
-        ? <motion.video layoutId={file.id} src={url} muted playsInline preload="metadata" onLoadedMetadata={(e) => setDur(e.currentTarget.duration)} transition={zoom} />
-        : <motion.img layoutId={file.id} src={url} alt="" transition={zoom} />)}
+      {video
+        ? <motion.video layout src={url} muted playsInline preload="metadata" onLoadedMetadata={(e) => setDur(e.currentTarget.duration)} transition={zoom} />
+        : <motion.img layout src={url} alt="" transition={zoom} />}
       <div className="veil" />
       {video && state === 'ready' && <div className="center"><span className="play"><Play size={14} weight="fill" style={{ marginLeft: 2 }} /></span></div>}
       {video && dur != null && Number.isFinite(dur) && <span className="dur">{fmtDur(dur)}</span>}
