@@ -1,0 +1,20 @@
+services:
+  upload-inbox-server:
+    build: .
+    container_name: upload-inbox-server
+    user: "99:100"                 # nobody:users, Unraid's default share owner
+    ports:
+      - "8085:8080"                # LAN only, for testing; the tunnel does not need it
+    volumes:
+      - /mnt/user/upload-inbox:/upload-inbox
+    restart: unless-stopped
+
+  cloudflare-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: upload-inbox-tunnel
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    depends_on:
+      - upload-inbox-server
+    restart: unless-stopped
