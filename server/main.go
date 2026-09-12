@@ -163,6 +163,9 @@ func store(inbox string, up handler.FileInfo) string {
 		return ""
 	}
 	os.Remove(up.Storage[filestore.StorageKeyInfoPath])
+	// Unraid "New Permissions": dir 0777, file 0666, so SMB users other than nobody can move/delete.
+	os.Chmod(filepath.Dir(out), 0o777)
+	os.Chmod(out, 0o666)
 	log.Printf("stored %s (%d bytes)", out, up.Size)
 	return out
 }

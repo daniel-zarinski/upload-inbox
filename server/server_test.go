@@ -102,6 +102,9 @@ func TestUploadEndToEnd(t *testing.T) {
 	if out != want {
 		t.Fatalf("landed at %s, want %s", out, want)
 	}
+	if st, _ := os.Stat(out); st.Mode().Perm() != 0o666 {
+		t.Fatalf("file mode %v, want 0666 so SMB users can delete it", st.Mode().Perm())
+	}
 	got, _ := os.ReadFile(out)
 	if !bytes.Equal(got, blob) {
 		t.Fatal("stored bytes differ from upload")
