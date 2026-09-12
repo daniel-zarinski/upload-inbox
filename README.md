@@ -67,7 +67,7 @@ Re-run anytime; it prints the upload URL, portal links, and the rclone line for 
 
 ### Unraid pull
 
-The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 5 minutes. It needs the remote configured once, on the Unraid terminal, with the `config create` line from `azure/LINKS.md` (key filled in). Then Compose Down / Compose Up the stack.
+The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 5 minutes. Add the two lines `azure/LINKS.md` prints (`AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_KEY`) to the stack's `.env` next to `TZ`, then Compose Down / Compose Up.
 
 `move` deletes from Azure after a verified copy. Finished files only ever appear under their final name, so nothing half-written gets pulled. Check it with `docker logs upload-inbox-pull`.
 

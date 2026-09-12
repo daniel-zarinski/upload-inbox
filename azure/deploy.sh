@@ -56,9 +56,10 @@ cat > LINKS.md <<OUT
 
 Finder SMB mount does not work from home: the ISP blocks port 445. Use the browse link or Storage Explorer.
 
-On Unraid, once, then Compose Up the stack (upload-inbox-pull service does the rest):
+Unraid Compose Manager stack .env (then Compose Down / Up):
 
-    docker run --rm --user 99:100 -v /mnt/user/appdata/rclone:/config/rclone rclone/rclone config create azfiles azurefiles account $SA key '$KEY' share_name $SHARE
+    AZURE_STORAGE_ACCOUNT=$SA
+    AZURE_STORAGE_KEY=$KEY
 
 Storage Explorer on the Mac (plug icon → Storage account → Connection string):
 
