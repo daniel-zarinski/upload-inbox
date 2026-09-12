@@ -1,35 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Uppy, { type UppyFile, type Meta, type Body } from '@uppy/core'
 import Tus from '@uppy/tus'
 import { UppyContextProvider, useDropzone, useFileInput, useUppyState } from '@uppy/react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { ArrowClockwise, Check, PaperPlaneTilt, Pause, Play, Plus, Prohibit, VideoCamera, X } from '@phosphor-icons/react'
+import { AnimatePresence, motion } from 'motion/react'
+import { ArrowClockwise, ArrowUp, Check, ImageBroken, Pause, Play, Plus, Warning, X } from '@phosphor-icons/react'
 
 const MB = 1024 * 1024
+const MAX = 500 * MB
 type F = UppyFile<Meta, Body>
 const spring = { type: 'spring', stiffness: 420, damping: 30 } as const
-
-// Uppy locale packs, loaded on demand. ?lang=fr wins, then browser languages.
-const localeModules = import.meta.glob<{ default: unknown }>('../node_modules/@uppy/locales/lib/*_*.js')
-const localeNames = Object.keys(localeModules).map((p) => p.split('/').pop()!.replace('.js', ''))
-
-export function pickLocale(wanted: readonly string[], names: readonly string[] = localeNames): string | undefined {
-  for (const tag of wanted) {
-    const [lang, region] = tag.toLowerCase().split(/[-_]/)
-    if (!lang || lang === 'en') return undefined // en_US is Uppy's default
-    const exact = names.find((n) => n.toLowerCase() === `${lang}_${region ?? ''}`)
-    if (exact) return exact
-    const prefix = names.find((n) => n.toLowerCase().startsWith(`${lang}_`))
-    if (prefix) return prefix
-  }
-  return undefined
-}
+const RING = 2 * Math.PI * 46
+const TILE_R = 20, TILE_C = 2 * Math.PI * TILE_R
 
 function makeUppy() {
   return new Uppy({
-    // English defaults for the two strings this UI shows; locale packs override them.
-    locale: { strings: { uploadXFiles: { 0: 'Send %{smart_count} file', 1: 'Send %{smart_count} files' } }, pluralize: (n: number) => (n === 1 ? 0 : 1) },
-    restrictions: { allowedFileTypes: ['image/*', 'video/*'], maxFileSize: 500 * MB },
+    restrictions: { allowedFileTypes: ['image/*', 'video/*'], maxFileSize: MAX },
   }).use(Tus, {
     endpoint: '/files/',
     chunkSize: 25 * MB, // Cloudflare free tier caps a request at 100 MB
@@ -39,16 +24,18 @@ function makeUppy() {
   })
 }
 
+// Numerals only: "1.2 GB", "348 MB"
+export function fmt(bytes: number): string {
+  if (bytes >= 1024 * MB) return `${(bytes / (1024 * MB)).toFixed(1)} GB`
+  return `${Math.round(bytes / MB)} MB`
+}
+export function fmtDur(s: number): string {
+  const m = Math.floor(s / 60), r = Math.round(s % 60)
+  return `${m}:${r.toString().padStart(2, '0')}`
+}
+
 export default function App() {
   const [uppy] = useState(makeUppy)
-  useEffect(() => {
-    const forced = new URLSearchParams(location.search).get('lang')
-    const name = pickLocale(forced ? [forced] : navigator.languages)
-    if (!name) return
-    localeModules[`../node_modules/@uppy/locales/lib/${name}.js`]?.().then((m) => {
-      uppy.setOptions({ locale: m.default as never })
-    })
-  }, [uppy])
   return (
     <UppyContextProvider uppy={uppy}>
       <Inbox uppy={uppy} />
@@ -56,114 +43,100 @@ export default function App() {
   )
 }
 
-type Phase = 'idle' | 'ready' | 'uploading' | 'paused' | 'done' | 'failed'
+type Rejected = { id: string; reason: 'size' | 'type' }
+type Phase = 'idle' | 'ready' | 'sending' | 'done'
 
 function Inbox({ uppy }: { uppy: Uppy }) {
   const files = useUppyState(uppy, (s) => s.files)
-  const progress = useUppyState(uppy, (s) => s.totalProgress)
   const list = Object.values(files) as F[]
   const [busy, setBusy] = useState(false)
   const [paused, setPaused] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
-  const reduce = useReducedMotion()
+  const [rejected, setRejected] = useState<Rejected[]>([])
+  const [dragging, setDragging] = useState(false)
 
   useEffect(() => {
     const onUpload = () => { setBusy(true); setPaused(false) }
     const onComplete = () => setBusy(false)
-    const onReject = (_f: unknown, err: Error) => setToast(err.message)
-    uppy.on('upload', onUpload)
-    uppy.on('complete', onComplete)
-    uppy.on('restriction-failed', onReject)
+    const onReject = (f: { size?: number | null } | undefined) => {
+      const reason: Rejected['reason'] = (f?.size ?? 0) > MAX ? 'size' : 'type'
+      setRejected((r) => [...r, { id: `${Date.now()}-${r.length}`, reason }])
+    }
+    uppy.on('upload', onUpload); uppy.on('complete', onComplete); uppy.on('restriction-failed', onReject)
     return () => { uppy.off('upload', onUpload); uppy.off('complete', onComplete); uppy.off('restriction-failed', onReject) }
   }, [uppy])
-  useEffect(() => {
-    if (!toast) return
-    const t = setTimeout(() => setToast(null), 3500)
-    return () => clearTimeout(t)
-  }, [toast])
 
+  const drop = useDropzone(useMemo(() => ({ noClick: true, onDragEnter: () => setDragging(true), onDragLeave: () => setDragging(false), onDrop: () => setDragging(false) }), []))
+  const input = useFileInput()
+
+  const total = list.reduce((n, f) => n + (f.size ?? 0), 0)
+  const sent = list.reduce((n, f) => n + (f.progress.bytesUploaded || 0), 0)
+  const failedLeft = list.filter((f) => f.error).reduce((n, f) => n + ((f.size ?? 0) - (f.progress.bytesUploaded || 0)), 0)
   const allDone = list.length > 0 && list.every((f) => f.progress.uploadComplete)
   const anyError = list.some((f) => f.error)
-  const phase: Phase = list.length === 0 ? 'idle' : busy ? (paused ? 'paused' : 'uploading') : allDone ? 'done' : anyError ? 'failed' : 'ready'
+  const phase: Phase = list.length === 0 && rejected.length === 0 ? 'idle' : allDone ? 'done' : busy || anyError ? 'sending' : 'ready'
 
-  const input = useFileInput()
-  const [dragging, setDragging] = useState(false)
-  const onDragEnter = useCallback(() => setDragging(true), [])
-  const onDragLeave = useCallback(() => setDragging(false), [])
-  const onDrop = useCallback(() => setDragging(false), [])
-  const drop = useDropzone(useMemo(() => ({ noClick: true, onDragEnter, onDragLeave, onDrop }), [onDragEnter, onDragLeave, onDrop]))
-
-  const act = () => {
-    if (phase === 'ready') uppy.upload()
-    else if (phase === 'uploading') { uppy.pauseAll(); setPaused(true) }
-    else if (phase === 'paused') { uppy.resumeAll(); setPaused(false) }
-    else if (phase === 'failed') uppy.retryAll()
-    else if (phase === 'done') uppy.clear()
-  }
+  const failed = phase === 'sending' && !busy && anyError
+  const fabIcon = phase === 'idle' || phase === 'done' ? 'plus' : phase === 'ready' ? 'send' : failed ? 'retry' : paused ? 'play' : 'pause'
+  const reset = () => { uppy.clear(); setRejected([]); setBusy(false); setPaused(false) }
 
   return (
     <div {...drop.getRootProps()} className={`app${dragging ? ' dragging' : ''}`}>
       <input {...input.getInputProps()} />
-      <AnimatePresence mode="wait">
-        {phase === 'idle' ? (
-          <motion.div key="idle" className="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-            <motion.button
-              className="idle-btn"
-              aria-label="Add photos and videos"
-              {...input.getButtonProps()}
-              animate={reduce ? undefined : { scale: [1, 1.05, 1] }}
-              transition={reduce ? undefined : { duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-              whileTap={{ scale: 0.92 }}
-            >
-              <Plus size={72} weight="bold" />
-            </motion.button>
-          </motion.div>
-        ) : (
-          <motion.div key="grid" className="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <AnimatePresence>
-              {list.map((f) => (
-                <Tile key={f.id} file={f} uppy={uppy} locked={busy || allDone} />
-              ))}
-              {!busy && !allDone && (
-                <motion.button key="add" layout className="add" aria-label="Add more" {...input.getButtonProps()}
-                  initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={spring} whileTap={{ scale: 0.94 }}>
-                  <Plus size={36} weight="bold" />
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </motion.div>
+      <AnimatePresence mode="wait" initial={false}>
+        {phase === 'idle' && (
+          <motion.button key="idle" className="home" aria-label="Add photos and videos" {...input.getButtonProps()}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <span className="stack"><i className="back" /><i className="front"><Play size={24} weight="fill" /></i><i className="dot" /></span>
+            <span className="beacon"><span className="ripple" /></span>
+          </motion.button>
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
         {phase !== 'idle' && (
-          <motion.div key="dock" className="dock" initial={{ y: 120 }} animate={{ y: 0 }} exit={{ y: 120 }} transition={spring}>
-            <motion.button className={`cta ${phase}${phase === 'ready' ? ' send' : ''}`} onClick={act} whileTap={{ scale: 0.97 }} aria-label={phase}>
-              {(phase === 'uploading' || phase === 'paused') && (
-                <motion.span className="fill" initial={{ scaleX: 0 }} animate={{ scaleX: progress / 100 }} transition={{ ease: 'easeOut', duration: 0.35 }} />
-              )}
-              <AnimatePresence mode="popLayout" initial={false}>
-                <motion.span key={phase} className="label" initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -24, opacity: 0 }} transition={spring}>
-                  {phase === 'ready' && <><PaperPlaneTilt size={30} weight="fill" />{uppy.i18n('uploadXFiles', { smart_count: list.length })}</>}
-                  {phase === 'uploading' && <><Pause size={30} weight="fill" />{Math.round(progress)}%</>}
-                  {phase === 'paused' && <><Play size={30} weight="fill" />{Math.round(progress)}%</>}
-                  {phase === 'failed' && <ArrowClockwise size={32} weight="bold" />}
-                  {phase === 'done' && <Check size={34} weight="bold" />}
-                </motion.span>
+          <motion.div key="grid" style={{ display: 'contents' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="chip-row"><span className="chip">{phase === 'sending' ? `${fmt(sent)} / ${fmt(total)}` : `${list.length} · ${fmt(total)}`}</span></div>
+            <div className="grid">
+              <AnimatePresence>
+                {list.map((f) => <Tile key={f.id} file={f} uppy={uppy} locked={phase !== 'ready'} />)}
+                {rejected.map((r) => <RejectedTile key={r.id} reason={r.reason} onDismiss={() => setRejected((x) => x.filter((y) => y.id !== r.id))} />)}
+                {phase === 'ready' && (
+                  <motion.button key="add" layout className="add" aria-label="Add more" {...input.getButtonProps()}
+                    initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={spring} whileTap={{ scale: 0.94 }}>
+                    <Plus size={34} weight="bold" />
+                  </motion.button>
+                )}
               </AnimatePresence>
-            </motion.button>
+            </div>
           </motion.div>
         )}
+
       </AnimatePresence>
 
-      <AnimatePresence>
-        {toast && (
-          <motion.div key="toast" className="toast" role="alert" initial={{ y: -80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -80, opacity: 0 }} transition={spring}>
-            <Prohibit size={24} weight="bold" />
-            <span>{toast}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* One button for the whole flow: Motion `layout` moves and resizes it between phases. */}
+      <motion.button layout className={`fab ${phase}${paused ? ' paused' : ''}${failed ? ' failed' : ''}`}
+        aria-label={phase} disabled={phase === 'ready' && list.length === 0} whileTap={{ scale: 0.94 }}
+        animate={{ scale: phase === 'idle' || phase === 'done' ? [1, 1.05, 1] : 1 }}
+        transition={{ layout: spring, scale: phase === 'idle' || phase === 'done' ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } : spring }}
+        onClick={phase === 'idle' ? input.getButtonProps().onClick : phase === 'ready' ? () => uppy.upload() : phase === 'done' ? () => { reset(); input.getButtonProps().onClick() }
+          : () => { if (failed) { uppy.retryAll(); return } paused ? uppy.resumeAll() : uppy.pauseAll(); setPaused(!paused) }}>
+        <AnimatePresence>
+          {phase === 'sending' && (
+            <motion.svg key="ring" className="fab-ring" viewBox="0 0 100 100" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
+              <circle className="track" cx="50" cy="50" r="46" />
+              {failedLeft > 0 && <circle className="fail" cx="50" cy="50" r="46" strokeDasharray={RING} strokeDashoffset={RING * (1 - (sent + failedLeft) / (total || 1))} transform="rotate(-90 50 50)" />}
+              <circle className="bar" cx="50" cy="50" r="46" strokeDasharray={RING} strokeDashoffset={RING * (1 - sent / (total || 1))} transform="rotate(-90 50 50)" />
+            </motion.svg>
+          )}
+        </AnimatePresence>
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span key={fabIcon} className="fab-icon" initial={{ scale: 0.4, opacity: 0, rotate: -90 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} exit={{ scale: 0.4, opacity: 0, rotate: 90 }} transition={spring}>
+            {fabIcon === 'plus' && <Plus size={56} weight="bold" />}
+            {fabIcon === 'send' && <ArrowUp size={34} weight="bold" />}
+            {fabIcon === 'pause' && <Pause size={28} weight="fill" />}
+            {fabIcon === 'play' && <Play size={28} weight="fill" />}
+            {fabIcon === 'retry' && <ArrowClockwise size={30} weight="bold" />}
+          </motion.span>
+        </AnimatePresence>
+      </motion.button>
     </div>
   )
 }
@@ -177,41 +150,50 @@ function useObjectURL(file: F): string {
 
 function Tile({ file, uppy, locked }: { file: F; uppy: Uppy; locked: boolean }) {
   const url = useObjectURL(file)
-  const video = file.type?.startsWith('video/')
-  const done = !!file.progress.uploadComplete
+  const video = !!file.type?.startsWith('video/')
+  const [dur, setDur] = useState<number | null>(null)
   const pct = file.progress.percentage ?? 0
-  const state = file.error ? 'error' : done ? 'done' : file.isPaused ? 'paused' : file.progress.uploadStarted ? 'uploading' : 'ready'
-  const r = 24, c = 2 * Math.PI * r
+  const state = file.error ? 'error' : file.progress.uploadComplete ? 'done' : file.isPaused ? 'paused' : file.progress.uploadStarted ? 'uploading' : 'ready'
 
   return (
     <motion.div layout className={`tile ${state}`} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={spring}>
-      {video ? <video src={url} muted playsInline preload="metadata" /> : <img src={url} alt="" />}
-      {video && <VideoCamera className="tile-kind" size={20} weight="fill" />}
-
-      {state === 'ready' && !locked && (
-        <button className="tile-x" aria-label="Remove" onClick={() => uppy.removeFile(file.id)}><X size={18} weight="bold" /></button>
-      )}
-      {(state === 'uploading' || state === 'paused') && (
-        <div className="tile-center">
-          <svg className="ring" viewBox="0 0 56 56">
-            <circle className="track" cx="28" cy="28" r={r} />
-            <circle className="bar" cx="28" cy="28" r={r} strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} />
+      {video ? <video src={url} muted playsInline preload="metadata" onLoadedMetadata={(e) => setDur(e.currentTarget.duration)} /> : <img src={url} alt="" />}
+      <div className="veil" />
+      {video && state === 'ready' && <div className="center"><span className="play"><Play size={14} weight="fill" style={{ marginLeft: 2 }} /></span></div>}
+      {video && dur != null && Number.isFinite(dur) && <span className="dur">{fmtDur(dur)}</span>}
+      {state === 'ready' && !locked && <button className="x" aria-label="Remove" onClick={() => uppy.removeFile(file.id)}><X size={13} weight="bold" /></button>}
+      {state === 'uploading' && (
+        <div className="center">
+          <svg className="ring" viewBox="0 0 48 48">
+            <circle className="track" cx="24" cy="24" r={TILE_R} />
+            <circle className="bar" cx="24" cy="24" r={TILE_R} strokeDasharray={TILE_C} strokeDashoffset={TILE_C * (1 - pct / 100)} transform="rotate(-90 24 24)" />
           </svg>
-          {state === 'paused' && <Pause size={22} weight="fill" />}
         </div>
       )}
+      {state === 'paused' && <div className="center" style={{ color: 'var(--muted)' }}><Pause size={24} weight="bold" /><span className="dots"><i /><i /><i /></span></div>}
       {state === 'error' && (
-        <button className="tile-retry" aria-label="Retry" onClick={() => uppy.retryUpload(file.id)}>
-          <span><ArrowClockwise size={28} weight="bold" /></span>
+        <button className="center" aria-label="Retry" onClick={() => uppy.retryUpload(file.id)}>
+          <span className="bang">!</span><span className="retry"><ArrowClockwise size={22} weight="bold" /></span>
         </button>
       )}
       <AnimatePresence>
         {state === 'done' && (
-          <motion.div key="ok" className="tile-badge" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={spring}>
-            <Check size={18} weight="bold" />
+          <motion.div key="ok" className="center" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={spring}>
+            <span className="badge-done"><Check size={18} weight="bold" /></span>
           </motion.div>
         )}
       </AnimatePresence>
+    </motion.div>
+  )
+}
+
+function RejectedTile({ reason, onDismiss }: { reason: 'size' | 'type'; onDismiss: () => void }) {
+  return (
+    <motion.div layout className="tile rejected" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1, x: [0, -6, 6, -4, 4, 0] }} exit={{ scale: 0.6, opacity: 0 }} transition={spring}>
+      <div className="center">
+        {reason === 'size' ? <><Warning size={38} weight="fill" /><span className="reject-label">&gt; 500 MB</span></> : <ImageBroken size={38} weight="regular" />}
+      </div>
+      <button className="x" aria-label="Dismiss" onClick={onDismiss}><X size={13} weight="bold" /></button>
     </motion.div>
   )
 }
