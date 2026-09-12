@@ -23,7 +23,7 @@ services:
       - RCLONE_CONFIG_AZFILES_ACCOUNT=${AZURE_STORAGE_ACCOUNT}
       - RCLONE_CONFIG_AZFILES_KEY=${AZURE_STORAGE_KEY}
     entrypoint: sh
-    command: ["-c", "umask 000; while true; do rclone move azfiles: /data --exclude '.tusd-partial/**' --min-age 2m --delete-empty-src-dirs --log-level INFO; sleep 120; done"]
+    command: ["-c", "umask 000; while true; do rclone move azfiles: /data --exclude '.tusd-partial/**' --min-age 2m --delete-empty-src-dirs --log-level INFO; rclone delete azfiles:.tusd-partial --min-age 24h --log-level INFO; sleep 120; done"]
     volumes:
       - /mnt/user/upload-inbox:/data
     restart: unless-stopped

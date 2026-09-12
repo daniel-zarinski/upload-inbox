@@ -69,7 +69,7 @@ Re-run anytime; it prints the upload URL, portal links, and the rclone line for 
 
 The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 2 minutes. Add the two lines `azure/LINKS.md` prints (`AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_KEY`) to the stack's `.env` next to `TZ`, then Compose Down / Compose Up.
 
-`move` deletes from Azure after a verified copy. Finished files only ever appear under their final name, so nothing half-written gets pulled. Check it with `docker logs upload-inbox-pull`.
+`move` deletes from Azure after a verified copy. Finished files only ever appear under their final name, so nothing half-written gets pulled. It also deletes abandoned partial uploads older than 24 h from `.tusd-partial/`. Check it with `docker logs upload-inbox-pull`.
 
 ### Notes
 
