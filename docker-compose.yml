@@ -10,3 +10,16 @@ services:
     volumes:
       - /mnt/user/upload-inbox:/upload-inbox
     restart: unless-stopped
+
+  # Pulls finished uploads down from Azure every 5 minutes (see README "Azure").
+  # Needs /mnt/user/appdata/rclone/rclone.conf with the `azfiles` remote from azure/LINKS.md.
+  upload-inbox-pull:
+    image: rclone/rclone:latest
+    container_name: upload-inbox-pull
+    user: "99:100"
+    entrypoint: sh
+    command: ["-c", "while true; do rclone move azfiles: /data --exclude '.tusd-partial/**' --min-age 2m --delete-empty-src-dirs --log-level INFO; sleep 300; done"]
+    volumes:
+      - /mnt/user/appdata/rclone:/config/rclone
+      - /mnt/user/upload-inbox:/data
+    restart: unless-stopped

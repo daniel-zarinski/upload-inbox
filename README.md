@@ -55,6 +55,29 @@ Updating: push to `main`, wait for the action, then Compose Down / Compose Up (p
 
 Upload a video, then check `/mnt/user/upload-inbox/<today>/`.
 
+## Azure (for uploaders in China)
+
+Cloudflare Tunnel is throttled from mainland China. Azure East Asia (Hong Kong) isn't. The same image runs on Azure Container Apps with an Azure Files share mounted at `/upload-inbox`, sleeps when idle, and Unraid pulls finished files down every few minutes. Everything lives in one resource group, `upload-inbox`.
+
+```
+./azure/deploy.sh
+```
+
+Re-run anytime; it prints the upload URL, portal links, and the rclone line for the next step. `./azure/destroy.sh` removes the whole resource group, uploads included, so pull them first.
+
+### Unraid pull
+
+The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 5 minutes. It needs the remote configured once, on the Unraid terminal, with the `config create` line from `azure/LINKS.md` (key filled in). Then Compose Down / Compose Up the stack.
+
+`move` deletes from Azure after a verified copy. Finished files only ever appear under their final name, so nothing half-written gets pulled. Check it with `docker logs upload-inbox-pull`.
+
+### Notes
+
+- Updating: `az containerapp update -n upload-inbox -g upload-inbox --image ghcr.io/daniel-zarinski/upload-inbox-server:latest`. Container Apps doesn't re-pull `latest` by itself.
+- First request after idle takes a few seconds while the container wakes.
+- Cost: idle compute is near zero, storage is cents, egress to your house is about $0.10/GB.
+- Logs: `az containerapp logs show -n upload-inbox -g upload-inbox --follow`.
+
 ## Day to day
 
 - Browse uploads in the Unraid file manager or a private SMB export of the share.
