@@ -14,7 +14,7 @@ function makeUppy() {
     chunkSize: 25 * MB, // Cloudflare free tier caps a request at 100 MB
     limit: 3,
     retryDelays: [0, 1000, 3000, 5000],
-    allowedMetaFields: ['filename', 'filetype', 'uploader'],
+    allowedMetaFields: ['name', 'type', 'uploader'], // @uppy/tus maps name→filename, type→filetype
   })
 }
 
