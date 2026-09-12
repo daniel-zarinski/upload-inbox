@@ -34,17 +34,13 @@ Array-first means every upload is parity-protected the moment it finishes. The t
 
 ### 2. Cloudflare Tunnel
 
-1. Cloudflare Zero Trust → Networks → Tunnels → Create a tunnel → Cloudflared.
-2. Under "Install connector", pick Docker and copy the long token after `--token`.
-3. Public Hostname tab → Add: subdomain `upload`, your domain, Service type `HTTP`, URL `upload-inbox-server:8080`.
-
-If you already run cloudflared on Unraid, skip the `cloudflare-tunnel` service in `docker-compose.yml` and add the public hostname to your existing tunnel with URL `http://<unraid-ip>:8085`.
+In your existing tunnel add a Public Hostname: subdomain `upload`, your domain, type `HTTP`, URL `http://<unraid-ip>:8085`.
 
 ### 3. Deploy
 
 1. Apps → install **Compose Manager**.
 2. Copy this folder to `/mnt/user/appdata/public-upload-inbox`.
-3. `cp .env.example .env`, paste the tunnel token, set your `TZ`.
+3. `cp .env.example .env` and set your `TZ`.
 4. Docker tab → Compose → Add New Stack → name `upload-inbox`, path `/mnt/user/appdata/public-upload-inbox` → Compose Up.
 
 First build takes a few minutes (it compiles the UI and the server).
