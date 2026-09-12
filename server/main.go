@@ -26,12 +26,16 @@ var webFS embed.FS
 
 const maxUploadBytes = 500 << 20 // 500 MB, the stated ceiling
 
-var unsafeChars = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+var (
+	unsafeChars = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+	dotRuns     = regexp.MustCompile(`\.{2,}`)
+)
 
 // sanitize turns attacker-controlled metadata into a single safe path component.
 func sanitize(s, fallback string) string {
 	s = unsafeChars.ReplaceAllString(strings.TrimSpace(s), "_")
-	s = strings.Trim(s, "._") // kills "..", leading dots, stray underscores
+	s = dotRuns.ReplaceAllString(s, ".") // no ".." anywhere
+	s = strings.Trim(s, "._")            // kills "..", leading dots, stray underscores
 	if s == "" {
 		return fallback
 	}
@@ -101,11 +105,12 @@ func env(key, def string) string {
 	return def
 }
 
-func main() {
-	inbox := env("INBOX_DIR", "/upload-inbox")
+// newServer wires tusd + the file mover + the static UI. done receives the
+// final path of every stored upload (or "" on failure); nil is allowed.
+func newServer(inbox string, done chan<- string) (http.Handler, error) {
 	partial := filepath.Join(inbox, ".tusd-partial")
 	if err := os.MkdirAll(partial, 0o775); err != nil {
-		log.Fatalf("create %s: %v", partial, err)
+		return nil, fmt.Errorf("create %s: %w", partial, err)
 	}
 
 	composer := handler.NewStoreComposer()
@@ -121,34 +126,52 @@ func main() {
 		RespectForwardedHeaders: true, // behind Cloudflare Tunnel
 	})
 	if err != nil {
-		log.Fatalf("tusd: %v", err)
+		return nil, fmt.Errorf("tusd: %w", err)
 	}
 
 	go func() {
 		for ev := range h.CompleteUploads {
-			src := ev.Upload.Storage[filestore.StorageKeyPath]
-			out := destination(inbox, ev.Upload.MetaData["uploader"], ev.Upload.MetaData["filename"], time.Now())
-			if err := os.MkdirAll(filepath.Dir(out), 0o775); err != nil {
-				log.Printf("KEEPING %s in partial dir, mkdir failed: %v", ev.Upload.ID, err)
-				continue
+			out := store(inbox, ev.Upload)
+			if done != nil {
+				done <- out
 			}
-			if err := moveFile(src, out); err != nil {
-				log.Printf("KEEPING %s in partial dir, move failed: %v", ev.Upload.ID, err)
-				continue
-			}
-			os.Remove(ev.Upload.Storage[filestore.StorageKeyInfoPath])
-			log.Printf("stored %s (%d bytes)", out, ev.Upload.Size)
 		}
 	}()
 
 	dist, err := fs.Sub(webFS, "web/dist")
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/files/", http.StripPrefix("/files/", h))
 	mux.Handle("/", http.FileServer(http.FS(dist)))
+	return mux, nil
+}
 
+// store moves a finished upload into its day/uploader folder. Returns the
+// final path, or "" if the file was left in the partial dir.
+func store(inbox string, up handler.FileInfo) string {
+	src := up.Storage[filestore.StorageKeyPath]
+	out := destination(inbox, up.MetaData["uploader"], up.MetaData["filename"], time.Now())
+	if err := os.MkdirAll(filepath.Dir(out), 0o775); err != nil {
+		log.Printf("KEEPING %s in partial dir, mkdir failed: %v", up.ID, err)
+		return ""
+	}
+	if err := moveFile(src, out); err != nil {
+		log.Printf("KEEPING %s in partial dir, move failed: %v", up.ID, err)
+		return ""
+	}
+	os.Remove(up.Storage[filestore.StorageKeyInfoPath])
+	log.Printf("stored %s (%d bytes)", out, up.Size)
+	return out
+}
+
+func main() {
+	inbox := env("INBOX_DIR", "/upload-inbox")
+	srv, err := newServer(inbox, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	log.Printf("upload-inbox-server listening on :8080, inbox=%s", inbox)
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	log.Fatal(http.ListenAndServe(":8080", srv))
 }

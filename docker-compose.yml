@@ -3,6 +3,8 @@ services:
     build: .
     container_name: upload-inbox-server
     user: "99:100"                 # nobody:users, Unraid's default share owner
+    environment:
+      - TZ=${TZ:-America/Toronto}  # day folders use this timezone
     ports:
       - "8085:8080"                # LAN only, for testing; the tunnel does not need it
     volumes:

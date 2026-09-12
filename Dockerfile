@@ -17,6 +17,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /upload-inbox-server .
 
 # stage 3: runtime
 FROM alpine:3.24
+RUN apk add --no-cache tzdata
 COPY --from=server /upload-inbox-server /upload-inbox-server
 USER 99:100
 EXPOSE 8080

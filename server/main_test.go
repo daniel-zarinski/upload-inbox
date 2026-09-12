@@ -24,6 +24,9 @@ func TestDestinationStaysInsideDayFolder(t *testing.T) {
 	if sanitize("", "anonymous") != "anonymous" || sanitize("  .. ", "x") != "x" {
 		t.Fatal("fallbacks broken")
 	}
+	if got := sanitize("dan/../x", ""); got != "dan_._x" {
+		t.Fatalf("dot run not collapsed: %q", got)
+	}
 	// collision gets a time prefix
 	os.MkdirAll(filepath.Dir(out), 0o755)
 	os.WriteFile(out, nil, 0o644)
