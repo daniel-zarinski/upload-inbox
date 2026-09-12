@@ -9,6 +9,7 @@ const MB = 1024 * 1024
 const MAX = 500 * MB
 type F = UppyFile<Meta, Body>
 const spring = { type: 'spring', stiffness: 420, damping: 30 } as const
+const zoom = { type: 'spring', bounce: 0, duration: 0.45 } as const // no overshoot on the preview zoom
 const RING = 2 * Math.PI * 46
 const TILE_R = 20, TILE_C = 2 * Math.PI * TILE_R
 
@@ -53,6 +54,7 @@ function Inbox({ uppy }: { uppy: Uppy }) {
   const [paused, setPaused] = useState(false)
   const [rejected, setRejected] = useState<Rejected[]>([])
   const [dragging, setDragging] = useState(false)
+  const [open, setOpen] = useState<{ id: string; url: string; video: boolean } | null>(null)
 
   useEffect(() => {
     const onUpload = () => { setBusy(true); setPaused(false) }
@@ -96,7 +98,7 @@ function Inbox({ uppy }: { uppy: Uppy }) {
             <div className="chip-row"><span className="chip">{phase === 'sending' ? `${fmt(sent)} / ${fmt(total)}` : `${list.length} · ${fmt(total)}`}</span></div>
             <div className="grid">
               <AnimatePresence>
-                {list.map((f) => <Tile key={f.id} file={f} uppy={uppy} locked={phase !== 'ready'} />)}
+                {list.map((f) => <Tile key={f.id} file={f} uppy={uppy} locked={phase !== 'ready'} hidden={open?.id === f.id} onOpen={setOpen} />)}
                 {rejected.map((r) => <RejectedTile key={r.id} reason={r.reason} onDismiss={() => setRejected((x) => x.filter((y) => y.id !== r.id))} />)}
                 {phase === 'ready' && (
                   <motion.button key="add" layout className="add" aria-label="Add more" {...input.getButtonProps()}
@@ -109,6 +111,17 @@ function Inbox({ uppy }: { uppy: Uppy }) {
           </motion.div>
         )}
 
+      </AnimatePresence>
+
+      {/* Preview: the tile's media and this one share a layoutId, so Motion animates it to full size and back. */}
+      <AnimatePresence>
+        {open && (
+          <motion.div key="lightbox" className="lightbox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(null)}>
+            {open.video
+              ? <motion.video layoutId={open.id} src={open.url} controls autoPlay playsInline transition={zoom} onClick={(e) => e.stopPropagation()} />
+              : <motion.img layoutId={open.id} src={open.url} alt="" transition={zoom} />}
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* One button for the whole flow: Motion `layout` moves and resizes it between phases. */}
@@ -148,7 +161,7 @@ function useObjectURL(file: F): string {
   return ref.current
 }
 
-function Tile({ file, uppy, locked }: { file: F; uppy: Uppy; locked: boolean }) {
+function Tile({ file, uppy, locked, hidden, onOpen }: { file: F; uppy: Uppy; locked: boolean; hidden: boolean; onOpen: (o: { id: string; url: string; video: boolean }) => void }) {
   const url = useObjectURL(file)
   const video = !!file.type?.startsWith('video/')
   const [dur, setDur] = useState<number | null>(null)
@@ -156,12 +169,15 @@ function Tile({ file, uppy, locked }: { file: F; uppy: Uppy; locked: boolean }) 
   const state = file.error ? 'error' : file.progress.uploadComplete ? 'done' : file.isPaused ? 'paused' : file.progress.uploadStarted ? 'uploading' : 'ready'
 
   return (
-    <motion.div layout className={`tile ${state}`} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={spring}>
-      {video ? <video src={url} muted playsInline preload="metadata" onLoadedMetadata={(e) => setDur(e.currentTarget.duration)} /> : <img src={url} alt="" />}
+    <motion.div layout className={`tile ${state}`} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={spring}
+      onClick={() => onOpen({ id: file.id, url, video })}>
+      {!hidden && (video
+        ? <motion.video layoutId={file.id} src={url} muted playsInline preload="metadata" onLoadedMetadata={(e) => setDur(e.currentTarget.duration)} transition={zoom} />
+        : <motion.img layoutId={file.id} src={url} alt="" transition={zoom} />)}
       <div className="veil" />
       {video && state === 'ready' && <div className="center"><span className="play"><Play size={14} weight="fill" style={{ marginLeft: 2 }} /></span></div>}
       {video && dur != null && Number.isFinite(dur) && <span className="dur">{fmtDur(dur)}</span>}
-      {state === 'ready' && !locked && <button className="x" aria-label="Remove" onClick={() => uppy.removeFile(file.id)}><X size={13} weight="bold" /></button>}
+      {state === 'ready' && !locked && <button className="x" aria-label="Remove" onClick={(e) => { e.stopPropagation(); uppy.removeFile(file.id) }}><X size={13} weight="bold" /></button>}
       {state === 'uploading' && (
         <div className="center">
           <svg className="ring" viewBox="0 0 48 48">
@@ -172,7 +188,7 @@ function Tile({ file, uppy, locked }: { file: F; uppy: Uppy; locked: boolean }) 
       )}
       {state === 'paused' && <div className="center" style={{ color: 'var(--muted)' }}><Pause size={24} weight="bold" /><span className="dots"><i /><i /><i /></span></div>}
       {state === 'error' && (
-        <button className="center" aria-label="Retry" onClick={() => uppy.retryUpload(file.id)}>
+        <button className="center" aria-label="Retry" onClick={(e) => { e.stopPropagation(); uppy.retryUpload(file.id) }}>
           <span className="bang">!</span><span className="retry"><ArrowClockwise size={22} weight="bold" /></span>
         </button>
       )}

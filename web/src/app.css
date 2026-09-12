@@ -115,3 +115,6 @@ input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; po
 .fab-ring .fail { stroke: var(--error); transition: stroke-dashoffset .35s ease-out; }
 .fab.paused .fab-ring .bar { stroke: var(--disabled-ink); }
 @media (prefers-reduced-motion: reduce) { .fab-ring .bar, .fab-ring .fail { transition: none; } }
+
+.lightbox { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.92); display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
+.lightbox img, .lightbox video { max-width: 100%; max-height: 100%; border-radius: var(--r-tile); object-fit: contain; }
