@@ -11,14 +11,13 @@ import (
 func TestDestinationStaysInsideDayFolder(t *testing.T) {
 	inbox := t.TempDir()
 	now := time.Date(2026, 9, 11, 14, 3, 5, 0, time.UTC)
-	out := destination(inbox, "../../etc", "../passwd", now)
+	out := destination(inbox, "../passwd", now)
 	day := filepath.Join(inbox, "2026-09-11")
 	if !strings.HasPrefix(out, day+string(filepath.Separator)) {
 		t.Fatalf("escaped day folder: %s", out)
 	}
 	rel, _ := filepath.Rel(day, out)
-	parts := strings.Split(rel, string(filepath.Separator))
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.Contains(rel, "..") {
+	if rel == "" || strings.ContainsAny(rel, `/\`) || strings.Contains(rel, "..") {
 		t.Fatalf("unexpected layout %q", rel)
 	}
 	if sanitize("", "anonymous") != "anonymous" || sanitize("  .. ", "x") != "x" {
@@ -30,7 +29,7 @@ func TestDestinationStaysInsideDayFolder(t *testing.T) {
 	// collision gets a time prefix
 	os.MkdirAll(filepath.Dir(out), 0o755)
 	os.WriteFile(out, nil, 0o644)
-	again := destination(inbox, "../../etc", "../passwd", now)
+	again := destination(inbox, "../passwd", now)
 	if filepath.Base(again) != "140305-"+filepath.Base(out) {
 		t.Fatalf("collision not suffixed: %s", again)
 	}

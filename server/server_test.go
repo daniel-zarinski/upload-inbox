@@ -55,7 +55,7 @@ func TestUploadEndToEnd(t *testing.T) {
 
 	res := tusReq(t, "POST", ts.URL+"/files/", nil, map[string]string{
 		"Upload-Length":   strconv.Itoa(len(blob)),
-		"Upload-Metadata": "filename " + b64("../../evil name.mp4") + ",uploader " + b64("dan/../x"),
+		"Upload-Metadata": "filename " + b64("../../evil name.mp4"),
 	})
 	if res.StatusCode != 201 {
 		t.Fatalf("create: %d", res.StatusCode)
@@ -98,7 +98,7 @@ func TestUploadEndToEnd(t *testing.T) {
 		t.Fatal("store failed")
 	}
 	day := time.Now().Format("2006-01-02")
-	want := filepath.Join(inbox, day, "dan_._x", "evil_name.mp4")
+	want := filepath.Join(inbox, day, "evil_name.mp4")
 	if out != want {
 		t.Fatalf("landed at %s, want %s", out, want)
 	}

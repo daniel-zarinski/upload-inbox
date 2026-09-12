@@ -5,14 +5,15 @@ A public, write-only drop box for photos and videos. Anyone with the link can up
 ```
 /mnt/user/upload-inbox/
   2026-09-11/
-    alice/IMG_1234.mov
-    bob/clip.mp4
+    IMG_1234.mov
+    clip.mp4          # same name twice in a day gets an HHMMSS- prefix
   .tusd-partial/        # uploads still in progress
 ```
 
 - Backend: one Go binary embedding [tusd](https://github.com/tus/tusd) (resumable, chunked uploads). 500 MB max per file.
 - Frontend: React + [Uppy](https://uppy.io). Mobile first, resumes after a dropped connection.
 - Exposure: Cloudflare Tunnel. 25 MB chunks stay under the free tier's 100 MB request cap.
+- Language: follows the browser (all Uppy locale packs), or force one with `?lang=fr`.
 
 ## Unraid setup
 
@@ -53,7 +54,7 @@ First build takes a few minutes (it compiles the UI and the server).
 - LAN: `http://<unraid-ip>:8085`
 - Public: `https://upload.yourdomain.tld` from a phone on cellular.
 
-Upload a video, then check `/mnt/user/upload-inbox/<today>/<name>/`.
+Upload a video, then check `/mnt/user/upload-inbox/<today>/`.
 
 ## Day to day
 

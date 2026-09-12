@@ -9,6 +9,7 @@
   "dependencies": {
     "@uppy/core": "^6.0.1",
     "@uppy/dashboard": "^6.0.0",
+    "@uppy/locales": "^5.2.0",
     "@uppy/react": "^6.0.0",
     "@uppy/tus": "^6.0.0",
     "react": "^19.3.0",

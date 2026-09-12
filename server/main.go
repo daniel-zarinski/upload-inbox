@@ -1,6 +1,6 @@
 // upload-inbox-server: public, write-only upload inbox.
 // tus protocol on /files/ (chunked + resumable), React UI on /.
-// Finished uploads move to $INBOX_DIR/YYYY-MM-DD/<uploader>/<filename>.
+// Finished uploads move to $INBOX_DIR/YYYY-MM-DD/<filename>.
 package main
 
 import (
@@ -42,9 +42,10 @@ func sanitize(s, fallback string) string {
 	return s
 }
 
-// destination picks <inbox>/<day>/<uploader>/<filename>, suffixing on collision.
-func destination(inbox, uploader, filename string, now time.Time) string {
-	dir := filepath.Join(inbox, now.Format("2006-01-02"), sanitize(uploader, "anonymous"))
+// destination picks <inbox>/<day>/<filename>, suffixing on collision.
+// ponytail: no per-uploader folder, add a sanitized MetaData["uploader"] segment here if needed
+func destination(inbox, filename string, now time.Time) string {
+	dir := filepath.Join(inbox, now.Format("2006-01-02"))
 	name := sanitize(filename, "file")
 	out := filepath.Join(dir, name)
 	if _, err := os.Stat(out); err == nil {
@@ -152,7 +153,7 @@ func newServer(inbox string, done chan<- string) (http.Handler, error) {
 // final path, or "" if the file was left in the partial dir.
 func store(inbox string, up handler.FileInfo) string {
 	src := up.Storage[filestore.StorageKeyPath]
-	out := destination(inbox, up.MetaData["uploader"], up.MetaData["filename"], time.Now())
+	out := destination(inbox, up.MetaData["filename"], time.Now())
 	if err := os.MkdirAll(filepath.Dir(out), 0o775); err != nil {
 		log.Printf("KEEPING %s in partial dir, mkdir failed: %v", up.ID, err)
 		return ""

@@ -4,7 +4,21 @@ import Tus from '@uppy/tus'
 import Dashboard from '@uppy/react/dashboard'
 
 const MB = 1024 * 1024
-const NAME_KEY = 'uploader-name'
+// Uppy locale packs, loaded on demand. ?lang=fr wins, then browser languages.
+const localeModules = import.meta.glob<{ default: unknown }>('../node_modules/@uppy/locales/lib/*_*.js')
+const localeNames = Object.keys(localeModules).map((p) => p.split('/').pop()!.replace('.js', ''))
+
+export function pickLocale(wanted: readonly string[], names: readonly string[] = localeNames): string | undefined {
+  for (const tag of wanted) {
+    const [lang, region] = tag.toLowerCase().split(/[-_]/)
+    if (!lang || lang === 'en') return undefined // en_US is Uppy's default
+    const exact = names.find((n) => n.toLowerCase() === `${lang}_${region ?? ''}`)
+    if (exact) return exact
+    const prefix = names.find((n) => n.toLowerCase().startsWith(`${lang}_`))
+    if (prefix) return prefix
+  }
+  return undefined
+}
 
 function makeUppy() {
   return new Uppy({
@@ -14,40 +28,25 @@ function makeUppy() {
     chunkSize: 25 * MB, // Cloudflare free tier caps a request at 100 MB
     limit: 3,
     retryDelays: [0, 1000, 3000, 5000],
-    allowedMetaFields: ['name', 'type', 'uploader'], // @uppy/tus maps name→filename, type→filetype
+    allowedMetaFields: ['name', 'type'], // @uppy/tus maps name→filename, type→filetype
   })
 }
 
 export default function App() {
   const [uppy] = useState(makeUppy)
-  const [name, setName] = useState(() => {
-    try { return localStorage.getItem(NAME_KEY) ?? '' } catch { return '' }
-  })
 
   useEffect(() => {
-    uppy.setMeta({ uploader: name })
-    try { localStorage.setItem(NAME_KEY, name) } catch { /* private mode */ }
-  }, [uppy, name])
+    const forced = new URLSearchParams(location.search).get('lang')
+    const name = pickLocale(forced ? [forced] : navigator.languages)
+    if (!name) return
+    localeModules[`../node_modules/@uppy/locales/lib/${name}.js`]?.().then((m) => {
+      uppy.setOptions({ locale: m.default as never })
+    })
+  }, [uppy])
 
   return (
     <div className="wrap">
-      <label className="name">
-        Your name (so your files land in your own folder)
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Alice"
-          autoComplete="name"
-          maxLength={40}
-        />
-      </label>
-      <Dashboard
-        uppy={uppy}
-        width="100%"
-        height="70vh"
-        proudlyDisplayPoweredByUppy={false}
-        note="Photos and videos, up to 500 MB each"
-      />
+      <Dashboard uppy={uppy} width="100%" height="calc(100dvh - 24px)" proudlyDisplayPoweredByUppy={false} />
     </div>
   )
 }
