@@ -1,4 +1,4 @@
-# public-upload-inbox
+# upload-inbox
 
 A public, write-only drop box for photos and videos. Anyone with the link can upload. Nobody can list or download. Files land on your Unraid array as plain files:
 
