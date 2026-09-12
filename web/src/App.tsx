@@ -14,15 +14,21 @@ const RING = 2 * Math.PI * 46
 const TILE_R = 20, TILE_C = 2 * Math.PI * TILE_R
 
 function makeUppy() {
-  return new Uppy({
+  const uppy = new Uppy({
     restrictions: { allowedFileTypes: ['image/*', 'video/*'], maxFileSize: MAX },
   }).use(Tus, {
     endpoint: '/files/',
-    chunkSize: 25 * MB, // Cloudflare free tier caps a request at 100 MB
+    chunkSize: 90 * MB, // Cloudflare free tier caps a request body at 100 MB
     limit: 3,
     retryDelays: [0, 1000, 3000, 5000],
     allowedMetaFields: ['name', 'type'], // @uppy/tus maps name→filename, type→filetype
   })
+  // Big files get 3 parallel partial uploads (tus concat); one cloudflared stream is the choke point.
+  // Photos stay 1 POST + 1 PATCH.
+  uppy.on('file-added', (f) => {
+    if ((f.size ?? 0) > 100 * MB) uppy.setFileState(f.id, { tus: { parallelUploads: 3 } })
+  })
+  return uppy
 }
 
 // Numerals only: "1.2 GB", "348 MB"

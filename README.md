@@ -12,7 +12,7 @@ A public, write-only drop box for photos and videos. Anyone with the link can up
 
 - Backend: one Go binary embedding [tusd](https://github.com/tus/tusd) (resumable, chunked uploads). 500 MB max per file.
 - Frontend: React + [Uppy](https://uppy.io). Mobile first, resumes after a dropped connection.
-- Exposure: Cloudflare Tunnel. 25 MB chunks stay under the free tier's 100 MB request cap.
+- Exposure: Cloudflare Tunnel. 90 MB chunks stay under the free tier's 100 MB request cap; files over 100 MB upload as 3 parallel parts.
 - Language: follows the browser (all Uppy locale packs), or force one with `?lang=fr`.
 
 ## Unraid setup
@@ -35,6 +35,8 @@ Array-first means every upload is parity-protected the moment it finishes. The t
 ### 2. Cloudflare Tunnel
 
 In your existing tunnel add a Public Hostname: subdomain `upload`, your domain, type `HTTP`, URL `http://<unraid-ip>:8085`.
+
+On your cloudflared container set `TUNNEL_TRANSPORT_PROTOCOL=http2` (or pass `--protocol http2`). HTTP/2 beats the default QUIC for large uploads on a stable uplink. `docker logs <cloudflared> | grep "Registered tunnel connection"` should show `protocol=http2`.
 
 ### 3. Deploy
 

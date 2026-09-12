@@ -131,8 +131,20 @@ func newServer(inbox string, done chan<- string) (http.Handler, error) {
 	}
 
 	go func() {
+		// ponytail: serial drain; destination()'s stat-then-rename isn't concurrency-safe.
+		// If an EXDEV copy measurably stalls other uploads' final PATCH, go-per-event with a lock around destination().
 		for ev := range h.CompleteUploads {
+			if ev.Upload.IsPartial {
+				continue // tusd fires this for each concat part too; only the final upload gets stored
+			}
 			out := store(inbox, ev.Upload)
+			if out != "" {
+				// filestore.ConcatUploads appends the parts but never deletes them
+				for _, id := range ev.Upload.PartialUploads {
+					os.Remove(filepath.Join(partial, id))
+					os.Remove(filepath.Join(partial, id+".info"))
+				}
+			}
 			if done != nil {
 				done <- out
 			}
