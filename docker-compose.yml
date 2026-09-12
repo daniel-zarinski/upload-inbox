@@ -1,6 +1,6 @@
 services:
   upload-inbox-server:
-    build: .
+    image: ghcr.io/daniel-zarinski/upload-inbox-server:latest
     container_name: upload-inbox-server
     user: "99:100"                 # nobody:users, Unraid's default share owner
     environment:
