@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tus/tusd/v2/pkg/filelocker"
 	"github.com/tus/tusd/v2/pkg/filestore"
 	"github.com/tus/tusd/v2/pkg/handler"
+	"github.com/tus/tusd/v2/pkg/memorylocker"
 )
 
 //go:embed all:web/dist
@@ -116,7 +116,9 @@ func newServer(inbox string, done chan<- string) (http.Handler, error) {
 
 	composer := handler.NewStoreComposer()
 	filestore.New(partial).UseIn(composer)
-	filelocker.New(partial).UseIn(composer)
+	// In-memory locks: single process, and file locks are PID files that never go stale
+	// when the server is PID 1 in the container, so a restart mid-upload blocked every resume.
+	memorylocker.New().UseIn(composer)
 
 	h, err := handler.NewHandler(handler.Config{
 		BasePath:                "/files/",

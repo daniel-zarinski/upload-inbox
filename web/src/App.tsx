@@ -23,10 +23,10 @@ function makeUppy() {
     retryDelays: [0, 1000, 3000, 5000],
     allowedMetaFields: ['name', 'type'], // @uppy/tus maps name→filename, type→filetype
   })
-  // Big files get 3 parallel partial uploads (tus concat); one cloudflared stream is the choke point.
+  // Files >40 MB get 4 parallel partial uploads (tus concat), one per cloudflared HA connection; a single stream is the choke point.
   // Photos stay 1 POST + 1 PATCH.
   uppy.on('file-added', (f) => {
-    if ((f.size ?? 0) > 100 * MB) uppy.setFileState(f.id, { tus: { parallelUploads: 3 } })
+    if ((f.size ?? 0) > 40 * MB) uppy.setFileState(f.id, { tus: { parallelUploads: 4 } })
   })
   return uppy
 }
