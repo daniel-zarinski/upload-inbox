@@ -11,7 +11,7 @@ services:
       - /mnt/user/upload-inbox:/upload-inbox
     restart: unless-stopped
 
-  # Pulls finished uploads down from Azure every 5 minutes (see README "Azure").
+  # Pulls finished uploads down from Azure every 2 minutes (see README "Azure").
   # .env: AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY, printed by azure/deploy.sh.
   upload-inbox-pull:
     image: rclone/rclone:latest
@@ -23,7 +23,7 @@ services:
       - RCLONE_CONFIG_AZFILES_ACCOUNT=${AZURE_STORAGE_ACCOUNT}
       - RCLONE_CONFIG_AZFILES_KEY=${AZURE_STORAGE_KEY}
     entrypoint: sh
-    command: ["-c", "while true; do rclone move azfiles: /data --exclude '.tusd-partial/**' --min-age 2m --delete-empty-src-dirs --log-level INFO; sleep 300; done"]
+    command: ["-c", "while true; do rclone move azfiles: /data --exclude '.tusd-partial/**' --min-age 2m --delete-empty-src-dirs --log-level INFO; sleep 120; done"]
     volumes:
       - /mnt/user/upload-inbox:/data
     restart: unless-stopped
