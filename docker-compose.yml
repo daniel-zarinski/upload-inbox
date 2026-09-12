@@ -4,7 +4,7 @@ services:
     container_name: upload-inbox-server
     user: "99:100"                 # nobody:users, Unraid's default share owner
     environment:
-      - TZ=${TZ:-America/Toronto}  # day folders use this timezone
+      - TZ=${TZ:-America/Edmonton}  # day folders use this timezone
     ports:
       - "8085:8080"                # point your Cloudflare tunnel public hostname at http://<unraid-ip>:8085
     volumes:

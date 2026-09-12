@@ -41,7 +41,7 @@ In your existing tunnel add a Public Hostname: subdomain `upload`, your domain, 
 The image is built by GitHub Actions on every push to `main` and published to `ghcr.io/daniel-zarinski/upload-inbox-server:latest` (public).
 
 1. Apps → install **Compose Manager**.
-2. Docker tab → Compose → Add New Stack → name `upload-inbox` → paste `docker-compose.yml`; in its `.env` set `TZ=America/Toronto`.
+2. Docker tab → Compose → Add New Stack → name `upload-inbox` → paste `docker-compose.yml`; in its `.env` set `TZ=America/Edmonton`.
 3. Compose Up.
 
 Updating: push to `main`, wait for the action, then Compose Down / Compose Up (pulls the new image).
