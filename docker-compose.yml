@@ -18,12 +18,11 @@ services:
     container_name: upload-inbox-pull
     user: "99:100"
     environment:
-      - RCLONE_CONFIG_AZFILES_TYPE=azurefiles
-      - RCLONE_CONFIG_AZFILES_SHARE_NAME=upload-inbox
-      - RCLONE_CONFIG_AZFILES_ACCOUNT=${AZURE_STORAGE_ACCOUNT}
-      - RCLONE_CONFIG_AZFILES_KEY=${AZURE_STORAGE_KEY}
+      - RCLONE_CONFIG_AZBLOB_TYPE=azureblob
+      - RCLONE_CONFIG_AZBLOB_ACCOUNT=${AZURE_STORAGE_ACCOUNT}
+      - RCLONE_CONFIG_AZBLOB_KEY=${AZURE_STORAGE_KEY}
     entrypoint: sh
-    command: ["-c", "umask 000; while true; do rclone move azfiles: /data --exclude '.tusd-partial/**' --min-age 2m --delete-empty-src-dirs --log-level INFO; rclone delete azfiles:.tusd-partial --min-age 24h --log-level INFO; sleep 120; done"]
+    command: ["-c", "umask 000; while true; do rclone move azblob:inbox /data --min-age 2m --log-level INFO; sleep 120; done"]
     volumes:
       - /mnt/user/upload-inbox:/data
     restart: unless-stopped
