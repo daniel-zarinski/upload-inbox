@@ -57,27 +57,24 @@ Upload a video, then check `/mnt/user/upload-inbox/<today>/`.
 
 ## Azure (for uploaders in China)
 
-Cloudflare Tunnel is throttled from mainland China. Azure East Asia (Hong Kong) isn't. The same image runs on Azure Container Apps with an Azure Files share mounted at `/upload-inbox`, sleeps when idle, and Unraid pulls finished files down every few minutes. Everything lives in one resource group, `upload-inbox`.
+Cloudflare Tunnel is throttled from mainland China. Azure East Asia (Hong Kong) isn't. The iOS app in `upload-app` uploads straight to Blob container `inbox` on a storage account there, with no server in between, and Unraid pulls finished files down every few minutes. Everything lives in one resource group, `upload-inbox`.
 
 ```
 ./azure/deploy.sh
 ```
 
-Re-run anytime; it prints the upload URL, portal links, and the rclone line for the next step. `./azure/destroy.sh` removes the whole resource group, uploads included, so pull them first.
+Re-run anytime; it creates the account, the `inbox` and `inbox-dev` containers, and the `phone-write` SAS policy on each, then prints portal links, the rclone lines for the next step, and the container SAS to paste into `upload-app/app.json`. `./azure/destroy.sh` removes the whole resource group, uploads included, so pull them first.
 
 ### Unraid pull
 
 The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 2 minutes. Add the two lines `azure/LINKS.md` prints (`AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_KEY`) to the stack's `.env` next to `TZ`, then Compose Down / Compose Up.
 
-`move` deletes from Azure after a verified copy. Finished files only ever appear under their final name, so nothing half-written gets pulled. It also deletes abandoned partial uploads older than 24 h from `.tusd-partial/`. Check it with `docker logs upload-inbox-pull`.
+`move` deletes from Azure after a verified copy. Blobs only appear once fully committed, so nothing half-written gets pulled. Check it with `docker logs upload-inbox-pull`.
 
 ### Notes
 
-- Updating: `az containerapp update -n upload-inbox -g upload-inbox --image ghcr.io/daniel-zarinski/upload-inbox-server:latest`. Container Apps doesn't re-pull `latest` by itself.
-- First request after idle takes a few seconds while the container wakes.
-- Cost: idle compute is near zero, storage is cents, egress to your house is about $0.10/GB.
-- Health check: `curl -I -X OPTIONS https://<app-url>/files/` returns `Tus-Resumable: 1.0.0`. `/files/` is the tus API the browser uploads to; the root URL is just the page.
-- Logs: `az containerapp logs show -n upload-inbox -g upload-inbox --follow`.
+- Cost: storage is cents, egress to your house is about $0.10/GB.
+- Revoking a leaked SAS: delete and recreate the `phone-write` policy on the container, then re-run `deploy.sh` for a new one.
 
 ## Day to day
 
