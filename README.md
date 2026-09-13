@@ -74,6 +74,7 @@ The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every
 ### Notes
 
 - Cost: storage is cents, egress to your house is about $0.10/GB.
+- Retention: Azure deletes `inbox-dev` blobs after 1 day and `inbox` blobs after 14 days (a backstop for a dead pull; rclone normally clears `inbox` within minutes). Deleted blobs are soft-deleted and recoverable for 7 days in the portal.
 - Revoking a leaked SAS: delete the `phone-write` policy on the container (`az storage container policy delete`), change `POLICY` in `deploy.sh`, re-run it, and paste the new SAS into `app.json`. Recreating the policy under the same name would make the old SAS valid again, and a later expiry does not invalidate it either. Rotating the account key also works but breaks the Unraid pull until its `.env` is updated.
 
 ## Day to day

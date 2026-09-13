@@ -27,6 +27,14 @@ for C in inbox inbox-dev; do
       --account-name $SA --account-key "$KEY" -o none
 done
 
+# Auto-delete. inbox-dev is simulator noise. inbox is a safety net if the Unraid pull is down for
+# two weeks; the pull normally empties it within minutes. Lifecycle runs daily, so "1" means 24-48 h.
+# Soft delete keeps anything deleted (by rclone or these rules) recoverable for 7 days.
+az storage account management-policy create --account-name $SA -g $RG -o none --policy '{"rules":[
+  {"name":"expire-dev","type":"Lifecycle","definition":{"filters":{"blobTypes":["blockBlob"],"prefixMatch":["inbox-dev/"]},"actions":{"baseBlob":{"delete":{"daysAfterModificationGreaterThan":1}}}}},
+  {"name":"expire-inbox","type":"Lifecycle","definition":{"filters":{"blobTypes":["blockBlob"],"prefixMatch":["inbox/"]},"actions":{"baseBlob":{"delete":{"daysAfterModificationGreaterThan":14}}}}}]}'
+az storage account blob-service-properties update --account-name $SA -g $RG --enable-delete-retention true --delete-retention-days 7 -o none
+
 SUB=$(az account show --query id -o tsv)
 TENANT=$(az account show --query tenantId -o tsv)
 P="https://portal.azure.com/#@$TENANT/resource/subscriptions/$SUB/resourceGroups/$RG"
