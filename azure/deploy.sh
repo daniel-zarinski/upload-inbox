@@ -13,7 +13,7 @@ POLICY=phone-write
 # Storage account names are global; pick once, remember in .env (gitignored).
 [ -f .env ] && source .env
 SA=${SA:-uploadinbox$(od -An -N4 -tx4 /dev/urandom | tr -d " ")}
-echo "SA=$SA" > .env
+grep -q "^SA=" .env 2>/dev/null || echo "SA=$SA" >> .env
 
 az group create -n $RG -l $LOC -o none
 az storage account create -n $SA -g $RG -l $LOC --sku Standard_LRS --kind StorageV2 \

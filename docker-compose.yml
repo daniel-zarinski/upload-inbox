@@ -11,7 +11,7 @@ services:
       - /mnt/user/upload-inbox:/upload-inbox
     restart: unless-stopped
 
-  # Pulls finished uploads down from Azure every 2 minutes (see README "Azure").
+  # Pulls finished uploads down from Azure every 20 seconds (see README "Azure").
   # .env: AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY, printed by azure/deploy.sh.
   upload-inbox-pull:
     image: rclone/rclone:latest
@@ -21,8 +21,18 @@ services:
       - RCLONE_CONFIG_AZBLOB_TYPE=azureblob
       - RCLONE_CONFIG_AZBLOB_ACCOUNT=${AZURE_STORAGE_ACCOUNT}
       - RCLONE_CONFIG_AZBLOB_KEY=${AZURE_STORAGE_KEY}
+      - HA_WEBHOOK_URL=${HA_WEBHOOK_URL:-}   # optional, see README "Unraid pull"
     entrypoint: sh
-    command: ["-c", "umask 000; while true; do rclone move azblob:inbox /data --min-age 2m --log-level INFO; sleep 120; done"]
+    # Pulls filenames from rclone's JSON log ("Copied ..." lines, one per moved file) and POSTs
+    # {"files":[...]} to Home Assistant. ponytail: a filename containing a double quote truncates in sed.
+    command:
+      - -c
+      - |
+        umask 000; while true; do
+          files=$$(rclone move azblob:inbox /data --min-age 0 --log-level INFO --use-json-log 2>&1 | tee /dev/stderr | sed -n 's/.*"msg":"Copied[^"]*".*"object":"\([^"]*\)".*/\1/p')
+          [ -n "$$files" ] && [ -n "$$HA_WEBHOOK_URL" ] && wget -q -T 10 -O- --header 'Content-Type: application/json' --post-data "{\"files\":[$$(printf '%s\n' "$$files" | sed 's/.*/"&"/' | paste -sd, -)]}" "$$HA_WEBHOOK_URL" || echo "HA notify failed for: $$files"
+          sleep 20
+        done
     volumes:
       - /mnt/user/upload-inbox:/data
     restart: unless-stopped

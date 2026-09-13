@@ -65,11 +65,75 @@ Cloudflare Tunnel is throttled from mainland China. Azure East Asia (Hong Kong) 
 
 Re-run anytime; it creates the account, the `inbox` and `inbox-dev` containers, and the `phone-write` SAS policy on each, then prints portal links, the rclone lines for the next step, and the container SAS to paste into `upload-app/app.json`. `./azure/destroy.sh` removes the whole resource group, uploads included, so pull them first.
 
+### Phone notification from Azure
+
+Instant "new upload" ping, sent by Event Grid the moment a blob lands (free at this volume). Create the HA automation below first, then:
+
+```
+./azure/notify.sh https://<ha>/api/webhook/upload-inbox-azure
+```
+
+The URL is kept in `azure/.env` (gitignored, next to `SA`), so a bare `./azure/notify.sh` re-applies it. Live setup: Event Grid subscription `ha-upload` on the storage account, HA automation "Upload inbox: new upload in Azure" with webhook id `upload-inbox-azure`, notifying `mobile_app_daniels_iphone`. With Nabu Casa remote UI the webhook URL is `https://<id>.ui.nabu.casa/api/webhook/upload-inbox-azure`.
+
+Event Grid validates a new webhook with a handshake HA can't answer, so the automation turns it into a notification. Tap it within 5 minutes; that opens the validation URL and activates the subscription. Every later event is a real upload.
+
+Each file gets its own notification, tagged with the blob path. The Unraid pull (next section) re-sends the same tag once the file is home, so the phone shows one entry per file that flips from "in Azure" to "synced".
+
+```yaml
+triggers:
+  - trigger: webhook
+    webhook_id: upload-inbox-azure
+    allowed_methods: [POST]
+    local_only: false
+actions:
+  - if:
+      - condition: template
+        value_template: "{{ trigger.json[0].eventType == 'Microsoft.EventGrid.SubscriptionValidationEvent' }}"
+    then:
+      - action: notify.mobile_app_<phone>
+        data:
+          message: Tap to activate the Azure upload webhook
+          data:
+            url: "{{ trigger.json[0].data.validationUrl }}"
+    else:
+      - repeat:
+          for_each: "{{ trigger.json | map(attribute='subject') | map('regex_replace', '^.*/blobs/', '') | list }}"
+          sequence:
+            - action: notify.mobile_app_<phone>
+              data:
+                title: In Azure
+                message: "{{ repeat.item }}"
+                data:
+                  tag: "upload-{{ repeat.item }}"
+                  group: upload-inbox
+```
+
 ### Unraid pull
 
-The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 2 minutes. Add the two lines `azure/LINKS.md` prints (`AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_KEY`) to the stack's `.env` next to `TZ`, then Compose Down / Compose Up.
+The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 20 seconds. Blobs only become visible once fully committed, so no minimum age is needed; the list calls cost about $0.65 a month at Hot tier list pricing ($0.05 per 10k). Add the two lines `azure/LINKS.md` prints (`AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_KEY`) to the stack's `.env` next to `TZ`, then Compose Down / Compose Up.
 
 `move` deletes from Azure after a verified copy. Blobs only appear once fully committed, so nothing half-written gets pulled. Check it with `docker logs upload-inbox-pull`.
+
+The live automation is "Upload inbox: synced to Unraid" (webhook id `upload-inbox`). To set it up, set `HA_WEBHOOK_URL` in the stack `.env` to a Home Assistant webhook URL. After each pull that moved files the service POSTs `{"files":["<path>", ...]}` there, within about half a minute of the upload. The automation reuses the Azure one's tag, so the existing notification is replaced in place:
+
+```yaml
+triggers:
+  - trigger: webhook
+    webhook_id: upload-inbox
+    allowed_methods: [POST]
+    local_only: false
+actions:
+  - repeat:
+      for_each: "{{ trigger.json.files }}"
+      sequence:
+        - action: notify.mobile_app_<phone>
+          data:
+            title: Synced to Unraid
+            message: "{{ repeat.item }}"
+            data:
+              tag: "upload-{{ repeat.item }}"
+              group: upload-inbox
+```
 
 ### Notes
 
