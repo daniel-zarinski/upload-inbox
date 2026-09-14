@@ -24,7 +24,8 @@ KEY=$(az storage account keys list -n $SA -g $RG --query '[0].value' -o tsv)
 
 for C in inbox inbox-dev; do
   az storage container create -n $C --account-name $SA --account-key "$KEY" -o none
-  az storage container policy show -c $C -n $POLICY --account-name $SA --account-key "$KEY" -o none 2>/dev/null ||
+  # 'policy show' exits 0 for a missing policy, so test via list.
+  [ -n "$(az storage container policy list -c $C --account-name $SA --account-key "$KEY" --query "\"$POLICY\"" -o tsv)" ] ||
     az storage container policy create -c $C -n $POLICY --permissions cw --expiry 2030-01-01T00:00:00Z \
       --account-name $SA --account-key "$KEY" -o none
 done
