@@ -77,7 +77,7 @@ The URL is kept in `azure/.env` (gitignored, next to `SA`), so a bare `./azure/n
 
 Event Grid validates a new webhook with a handshake HA can't answer, so the automation turns it into a notification. Tap it within 5 minutes; that opens the validation URL and activates the subscription. Every later event is a real upload.
 
-Each file gets its own notification, tagged with the blob path. The Unraid pull (next section) re-sends the same tag once the file is home, so the phone shows one entry per file that flips from "in Azure" to "synced".
+Three notifications per file, stacked together on the phone by `group` (the media path): "Uploading" when the app writes its small `meta/<path>.json` sidecar before starting the media, "In Azure" when the media blob commits, and "Synced to Unraid" from the pull (next section). Each stage has its own `tag`, so an Event Grid retry replaces its own ping rather than adding one. If the uploader cancels, the stack stops at "Uploading" and a stray sidecar ends up on Unraid under `meta/`.
 
 ```yaml
 triggers:
@@ -99,13 +99,16 @@ actions:
       - repeat:
           for_each: "{{ trigger.json | map(attribute='subject') | map('regex_replace', '^.*/blobs/', '') | list }}"
           sequence:
+            - variables:
+                meta: "{{ repeat.item.endswith('.json') }}"
+                path: "{{ repeat.item | regex_replace('^meta/', '') | regex_replace('\\.json$', '') }}"
             - action: notify.mobile_app_<phone>
               data:
-                title: In Azure
-                message: "{{ repeat.item }}"
+                title: "{{ 'Uploading' if meta else 'In Azure' }}"
+                message: "{{ path }}"
                 data:
-                  tag: "upload-{{ repeat.item }}"
-                  group: upload-inbox
+                  tag: "upload-{{ path }}-{{ 'start' if meta else 'azure' }}"
+                  group: "upload-{{ path }}"
 ```
 
 ### Unraid pull
@@ -114,7 +117,7 @@ The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every
 
 `move` deletes from Azure after a verified copy. Blobs only appear once fully committed, so nothing half-written gets pulled. Check it with `docker logs upload-inbox-pull`.
 
-The live automation is "Upload inbox: synced to Unraid" (webhook id `upload-inbox`). To set it up, set `HA_WEBHOOK_URL` in the stack `.env` to a Home Assistant webhook URL. After each pull that moved files the service POSTs `{"files":["<path>", ...]}` there, within about half a minute of the upload. The automation reuses the Azure one's tag, so the existing notification is replaced in place:
+The live automation is "Upload inbox: synced to Unraid" (webhook id `upload-inbox`). To set it up, set `HA_WEBHOOK_URL` in the stack `.env` to a Home Assistant webhook URL. After each pull that moved files the service POSTs `{"files":["<path>", ...]}` there, within about half a minute of the upload. The automation uses the same per-file `group` as the Azure one and skips the `meta/` sidecars:
 
 ```yaml
 triggers:
@@ -124,15 +127,15 @@ triggers:
     local_only: false
 actions:
   - repeat:
-      for_each: "{{ trigger.json.files }}"
+      for_each: "{{ trigger.json.files | reject('search', '\\.json$') | list }}"
       sequence:
         - action: notify.mobile_app_<phone>
           data:
             title: Synced to Unraid
             message: "{{ repeat.item }}"
             data:
-              tag: "upload-{{ repeat.item }}"
-              group: upload-inbox
+              tag: "upload-{{ repeat.item }}-synced"
+              group: "upload-{{ repeat.item }}"
 ```
 
 ### Notes
