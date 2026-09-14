@@ -48,11 +48,9 @@ SAS_DEV=$(sas inbox-dev)
 # first rclone slot, any other region the _2 slot. ponytail: two slots; a third region needs a slot map.
 ENV=../.env; [ -f $ENV ] || cp ../.env.example $ENV
 S=$([ $LOC = southeastasia ] || echo _2)
-for kv in AZURE_STORAGE_ACCOUNT$S=$SA AZURE_STORAGE_KEY$S=$KEY; do
-  k=${kv%%=*}; grep -q "^$k=" $ENV && sed -i '' "s|^$k=.*|$kv|" $ENV || echo "$kv" >> $ENV
-done
+sed -i '' "s|^AZURE_STORAGE_ACCOUNT$S=.*|AZURE_STORAGE_ACCOUNT$S=$SA|; s|^AZURE_STORAGE_KEY$S=.*|AZURE_STORAGE_KEY$S=$KEY|" $ENV
 
-# ../LINKS.<loc>.md (repo root, gitignored): it holds the storage key for the Unraid rclone step.
+# ../LINKS.<loc>.md (repo root, gitignored): it holds the connection string and SAS.
 cat > ../LINKS.$LOC.md <<OUT
 # upload-inbox on Azure ($LOC)
 
@@ -61,10 +59,7 @@ cat > ../LINKS.$LOC.md <<OUT
 - [Resource group]($P/overview)
 - [Cost]($P/costanalysis)
 
-Unraid Compose Manager stack .env (already written to ../.env; paste that file, then Compose Down / Up):
-
-    AZURE_STORAGE_ACCOUNT=$SA
-    AZURE_STORAGE_KEY=$KEY
+Unraid: paste ../.env into the Compose Manager stack, then Compose Down / Up.
 
 Storage Explorer on the Mac (plug icon → Storage account → Connection string):
 

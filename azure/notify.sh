@@ -2,7 +2,7 @@
 # Event Grid -> Home Assistant: POSTs a BlobCreated event to HA seconds after the app finishes an upload.
 # Usage: [LOC=eastasia] ./notify.sh [https://<ha>/api/webhook/<id>]
 # URL is remembered in .env (gitignored); re-run with a new one to change it. One subscription per
-# storage account (LOC picks SA_<loc> from .env); each needs its own tap-to-validate.
+# storage account (LOC picks SA_<loc> from .env).
 # Event Grid validates a new webhook with a handshake HA can't answer. The HA automation in the README
 # turns that handshake into a phone notification; tap it within 5 minutes and the subscription goes active.
 set -euo pipefail
