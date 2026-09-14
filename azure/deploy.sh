@@ -43,6 +43,14 @@ sas() { az storage container generate-sas -n $1 --policy-name $POLICY --account-
 SAS_INBOX=$(sas inbox)
 SAS_DEV=$(sas inbox-dev)
 
+# Stack .env at the repo root (gitignored) for Unraid Compose Manager: eastasia fills the first rclone
+# slot, any other region the _2 slot. ponytail: two slots; a third region needs a slot map.
+ENV=../.env; [ -f $ENV ] || cp ../.env.example $ENV
+S=$([ $LOC = eastasia ] || echo _2)
+for kv in AZURE_STORAGE_ACCOUNT$S=$SA AZURE_STORAGE_KEY$S=$KEY; do
+  k=${kv%%=*}; grep -q "^$k=" $ENV && sed -i '' "s|^$k=.*|$kv|" $ENV || echo "$kv" >> $ENV
+done
+
 # LINKS.<loc>.md is gitignored: it holds the storage key for the Unraid rclone step.
 cat > LINKS.$LOC.md <<OUT
 # upload-inbox on Azure ($LOC)
@@ -52,8 +60,7 @@ cat > LINKS.$LOC.md <<OUT
 - [Resource group]($P/overview)
 - [Cost]($P/costanalysis)
 
-Unraid Compose Manager stack .env (then Compose Down / Up). For a second account use the
-AZURE_STORAGE_ACCOUNT_2 / AZURE_STORAGE_KEY_2 slot instead:
+Unraid Compose Manager stack .env (already written to ../.env; paste that file, then Compose Down / Up):
 
     AZURE_STORAGE_ACCOUNT=$SA
     AZURE_STORAGE_KEY=$KEY

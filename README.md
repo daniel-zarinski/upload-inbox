@@ -115,7 +115,7 @@ actions:
 
 ### Unraid pull
 
-The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 20 seconds. Blobs only become visible once fully committed, so no minimum age is needed; the list calls cost about $0.65 a month at Hot tier list pricing ($0.05 per 10k). Add the two lines `azure/LINKS.<loc>.md` prints (`AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_KEY`) to the stack's `.env` next to `TZ`, then Compose Down / Compose Up. The optional `AZURE_STORAGE_ACCOUNT_2` / `AZURE_STORAGE_KEY_2` pair drains a second account (the other region) in the same loop; leave it empty to pull from one.
+The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 20 seconds. Blobs only become visible once fully committed, so no minimum age is needed; the list calls cost about $0.65 a month at Hot tier list pricing ($0.05 per 10k). `azure/deploy.sh` writes the account and key into the stack `.env` at the repo root (`AZURE_STORAGE_ACCOUNT` / `AZURE_STORAGE_KEY` for East Asia, the `_2` pair for any other region); paste that file into Compose Manager, then Compose Down / Compose Up. With the `_2` pair empty the loop pulls from one account.
 
 `move` deletes from Azure after a verified copy. Blobs only appear once fully committed, so nothing half-written gets pulled. Check it with `docker logs upload-inbox-pull`.
 
