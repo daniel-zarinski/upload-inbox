@@ -1,28 +1,31 @@
 #!/usr/bin/env bash
-# Provisions the Blob storage the iOS app uploads to, in East Asia (Hong Kong).
-# Everything lands in one resource group. Idempotent: re-run freely.
+# Provisions the Blob storage the iOS app uploads to. One account per region, all in one resource
+# group. LOC=southeastasia (Singapore, default; measured best from mainland China) or any other Azure
+# region slug, e.g. eastasia (Hong Kong). Idempotent: re-run freely.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 RG=upload-inbox
-LOC=eastasia
+LOC=${LOC:-southeastasia}
 # The app's SAS is issued against this stored access policy. To revoke a leaked SAS, delete the
 # policy, change this name, re-run, and re-issue: a SAS whose policy no longer exists is rejected.
 POLICY=phone-write
 
-# Storage account names are global; pick once, remember in .env (gitignored).
+# Storage account names are global; pick once per region, remember as SA_<loc> in .env (gitignored).
 [ -f .env ] && source .env
-SA=${SA:-uploadinbox$(od -An -N4 -tx4 /dev/urandom | tr -d " ")}
-grep -q "^SA=" .env 2>/dev/null || echo "SA=$SA" >> .env
+VAR=SA_$LOC
+SA=${!VAR:-uploadinbox$(od -An -N4 -tx4 /dev/urandom | tr -d " ")}
+grep -q "^$VAR=" .env 2>/dev/null || echo "$VAR=$SA" >> .env
 
-az group create -n $RG -l $LOC -o none
+az group show -n $RG -o none 2>/dev/null || az group create -n $RG -l $LOC -o none   # RG location is fixed at creation; accounts pick their own
 az storage account create -n $SA -g $RG -l $LOC --sku Standard_LRS --kind StorageV2 \
   --allow-blob-public-access false -o none
 KEY=$(az storage account keys list -n $SA -g $RG --query '[0].value' -o tsv)
 
 for C in inbox inbox-dev; do
   az storage container create -n $C --account-name $SA --account-key "$KEY" -o none
-  az storage container policy show -c $C -n $POLICY --account-name $SA --account-key "$KEY" -o none 2>/dev/null ||
+  # 'policy show' exits 0 for a missing policy, so test via list.
+  [ -n "$(az storage container policy list -c $C --account-name $SA --account-key "$KEY" --query "\"$POLICY\"" -o tsv)" ] ||
     az storage container policy create -c $C -n $POLICY --permissions cw --expiry 2030-01-01T00:00:00Z \
       --account-name $SA --account-key "$KEY" -o none
 done
@@ -42,19 +45,22 @@ sas() { az storage container generate-sas -n $1 --policy-name $POLICY --account-
 SAS_INBOX=$(sas inbox)
 SAS_DEV=$(sas inbox-dev)
 
-# LINKS.md is gitignored: it holds the storage key for the Unraid rclone step.
-cat > LINKS.md <<OUT
-# upload-inbox on Azure
+# Stack .env at the repo root (gitignored) for Unraid Compose Manager: the default region fills the
+# first rclone slot, any other region the _2 slot. ponytail: two slots; a third region needs a slot map.
+ENV=../.env; [ -f $ENV ] || cp ../.env.example $ENV
+S=$([ $LOC = southeastasia ] || echo _2)
+sed -i '' "s|^AZURE_STORAGE_ACCOUNT$S=.*|AZURE_STORAGE_ACCOUNT$S=$SA|; s|^AZURE_STORAGE_KEY$S=.*|AZURE_STORAGE_KEY$S=$KEY|" $ENV
+
+# ../LINKS.<loc>.md (repo root, gitignored): it holds the connection string and SAS.
+cat > ../LINKS.$LOC.md <<OUT
+# upload-inbox on Azure ($LOC)
 
 - [Browse uploaded blobs]($P/providers/Microsoft.Storage/storageAccounts/$SA/containersList)
 - [Storage account]($P/providers/Microsoft.Storage/storageAccounts/$SA)
 - [Resource group]($P/overview)
 - [Cost]($P/costanalysis)
 
-Unraid Compose Manager stack .env (then Compose Down / Up):
-
-    AZURE_STORAGE_ACCOUNT=$SA
-    AZURE_STORAGE_KEY=$KEY
+Unraid: paste ../.env into the Compose Manager stack, then Compose Down / Up.
 
 Storage Explorer on the Mac (plug icon → Storage account → Connection string):
 
@@ -65,4 +71,4 @@ Container SAS for upload-app/app.json (accountUrl https://$SA.blob.core.windows.
     inbox:     $SAS_INBOX
     inbox-dev: $SAS_DEV
 OUT
-cat LINKS.md
+cat ../LINKS.$LOC.md

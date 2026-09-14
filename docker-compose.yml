@@ -12,7 +12,8 @@ services:
     restart: unless-stopped
 
   # Pulls finished uploads down from Azure every 20 seconds (see README "Azure").
-  # .env: AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY, printed by azure/deploy.sh.
+  # .env: AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY, printed by azure/deploy.sh. The optional _2 pair
+  # drains a second storage account (another region); the loop skips azblob2 when it is unset.
   upload-inbox-pull:
     image: rclone/rclone:latest
     container_name: upload-inbox-pull
@@ -21,6 +22,9 @@ services:
       - RCLONE_CONFIG_AZBLOB_TYPE=azureblob
       - RCLONE_CONFIG_AZBLOB_ACCOUNT=${AZURE_STORAGE_ACCOUNT}
       - RCLONE_CONFIG_AZBLOB_KEY=${AZURE_STORAGE_KEY}
+      - RCLONE_CONFIG_AZBLOB2_TYPE=azureblob
+      - RCLONE_CONFIG_AZBLOB2_ACCOUNT=${AZURE_STORAGE_ACCOUNT_2:-}
+      - RCLONE_CONFIG_AZBLOB2_KEY=${AZURE_STORAGE_KEY_2:-}
       - HA_WEBHOOK_URL=${HA_WEBHOOK_URL:-}   # optional, see README "Unraid pull"
     entrypoint: sh
     # Pulls filenames from rclone's JSON log ("Copied ..." lines, one per moved file) and POSTs
@@ -29,8 +33,10 @@ services:
       - -c
       - |
         umask 000; while true; do
-          files=$$(rclone move azblob:inbox /data --min-age 0 --log-level INFO --use-json-log 2>&1 | tee /dev/stderr | sed -n 's/.*"msg":"Copied[^"]*".*"object":"\([^"]*\)".*/\1/p')
-          [ -n "$$files" ] && [ -n "$$HA_WEBHOOK_URL" ] && wget -q -T 10 -O- --header 'Content-Type: application/json' --post-data "{\"files\":[$$(printf '%s\n' "$$files" | sed 's/.*/"&"/' | paste -sd, -)]}" "$$HA_WEBHOOK_URL" || echo "HA notify failed for: $$files"
+          for r in azblob ${AZURE_STORAGE_ACCOUNT_2:+azblob2}; do
+            files=$$(rclone move $$r:inbox /data --min-age 0 --log-level INFO --use-json-log 2>&1 | tee /dev/stderr | sed -n 's/.*"msg":"Copied[^"]*".*"object":"\([^"]*\)".*/\1/p')
+            [ -n "$$files" ] && [ -n "$$HA_WEBHOOK_URL" ] && wget -q -T 10 -O- --header 'Content-Type: application/json' --post-data "{\"files\":[$$(printf '%s\n' "$$files" | sed 's/.*/"&"/' | paste -sd, -)]}" "$$HA_WEBHOOK_URL" || echo "HA notify failed for: $$files"
+          done
           sleep 20
         done
     volumes:
