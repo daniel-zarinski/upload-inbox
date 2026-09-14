@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Event Grid -> Home Assistant: POSTs a BlobCreated event to HA seconds after the app finishes an upload.
-# Usage: [LOC=japaneast] ./notify.sh [https://<ha>/api/webhook/<id>]
+# Usage: [LOC=eastasia] ./notify.sh [https://<ha>/api/webhook/<id>]
 # URL is remembered in .env (gitignored); re-run with a new one to change it. One subscription per
 # storage account (LOC picks SA_<loc> from .env); each needs its own tap-to-validate.
 # Event Grid validates a new webhook with a handshake HA can't answer. The HA automation in the README
@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 RG=upload-inbox
-LOC=${LOC:-eastasia}
+LOC=${LOC:-southeastasia}
 [ -f .env ] && source .env
 URL=${1:-${HA_WEBHOOK_URL:?usage: notify.sh HA_WEBHOOK_URL (or set it in azure/.env)}}
 grep -q '^HA_WEBHOOK_URL=' .env 2>/dev/null && sed -i '' "s|^HA_WEBHOOK_URL=.*|HA_WEBHOOK_URL=$URL|" .env || echo "HA_WEBHOOK_URL=$URL" >> .env

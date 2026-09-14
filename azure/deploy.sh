@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Provisions the Blob storage the iOS app uploads to. One account per region, all in one resource
-# group. LOC=eastasia (Hong Kong, default) or LOC=japaneast (Tokyo). Idempotent: re-run freely.
+# group. LOC=southeastasia (Singapore, default; measured best from mainland China) or any other Azure
+# region slug, e.g. eastasia (Hong Kong). Idempotent: re-run freely.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 RG=upload-inbox
-LOC=${LOC:-eastasia}
+LOC=${LOC:-southeastasia}
 # The app's SAS is issued against this stored access policy. To revoke a leaked SAS, delete the
 # policy, change this name, re-run, and re-issue: a SAS whose policy no longer exists is rejected.
 POLICY=phone-write
@@ -43,10 +44,10 @@ sas() { az storage container generate-sas -n $1 --policy-name $POLICY --account-
 SAS_INBOX=$(sas inbox)
 SAS_DEV=$(sas inbox-dev)
 
-# Stack .env at the repo root (gitignored) for Unraid Compose Manager: eastasia fills the first rclone
-# slot, any other region the _2 slot. ponytail: two slots; a third region needs a slot map.
+# Stack .env at the repo root (gitignored) for Unraid Compose Manager: the default region fills the
+# first rclone slot, any other region the _2 slot. ponytail: two slots; a third region needs a slot map.
 ENV=../.env; [ -f $ENV ] || cp ../.env.example $ENV
-S=$([ $LOC = eastasia ] || echo _2)
+S=$([ $LOC = southeastasia ] || echo _2)
 for kv in AZURE_STORAGE_ACCOUNT$S=$SA AZURE_STORAGE_KEY$S=$KEY; do
   k=${kv%%=*}; grep -q "^$k=" $ENV && sed -i '' "s|^$k=.*|$kv|" $ENV || echo "$kv" >> $ENV
 done
