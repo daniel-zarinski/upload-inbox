@@ -51,8 +51,8 @@ for kv in AZURE_STORAGE_ACCOUNT$S=$SA AZURE_STORAGE_KEY$S=$KEY; do
   k=${kv%%=*}; grep -q "^$k=" $ENV && sed -i '' "s|^$k=.*|$kv|" $ENV || echo "$kv" >> $ENV
 done
 
-# LINKS.<loc>.md is gitignored: it holds the storage key for the Unraid rclone step.
-cat > LINKS.$LOC.md <<OUT
+# ../LINKS.<loc>.md (repo root, gitignored): it holds the storage key for the Unraid rclone step.
+cat > ../LINKS.$LOC.md <<OUT
 # upload-inbox on Azure ($LOC)
 
 - [Browse uploaded blobs]($P/providers/Microsoft.Storage/storageAccounts/$SA/containersList)
@@ -74,4 +74,4 @@ Container SAS for upload-app/app.json (accountUrl https://$SA.blob.core.windows.
     inbox:     $SAS_INBOX
     inbox-dev: $SAS_DEV
 OUT
-cat LINKS.$LOC.md
+cat ../LINKS.$LOC.md

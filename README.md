@@ -64,7 +64,7 @@ Cloudflare Tunnel is throttled from mainland China. Azure isn't. The iOS app in 
 LOC=japaneast ./azure/deploy.sh
 ```
 
-Re-run anytime; it creates the account (name remembered as `SA_<loc>` in `azure/.env`), the `inbox` and `inbox-dev` containers, and the `phone-write` SAS policy on each, then writes `azure/LINKS.<loc>.md` with portal links, the rclone lines for the next step, and the container SAS to paste into `upload-app/app.json`. `./azure/destroy.sh` removes the whole resource group, uploads included, so pull them first.
+Re-run anytime; it creates the account (name remembered as `SA_<loc>` in `azure/.env`), the `inbox` and `inbox-dev` containers, and the `phone-write` SAS policy on each, then writes `LINKS.<loc>.md` with portal links, the rclone lines for the next step, and the container SAS to paste into `upload-app/app.json`. `./azure/destroy.sh` removes the whole resource group, uploads included, so pull them first.
 
 ### Phone notification from Azure
 

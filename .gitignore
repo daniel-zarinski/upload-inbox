@@ -3,4 +3,4 @@ web/node_modules
 web/dist
 server/web/dist
 inbox/
-azure/LINKS*.md
+LINKS*.md
