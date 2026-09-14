@@ -57,13 +57,14 @@ Upload a video, then check `/mnt/user/upload-inbox/<today>/`.
 
 ## Azure (for uploaders in China)
 
-Cloudflare Tunnel is throttled from mainland China. Azure East Asia (Hong Kong) isn't. The iOS app in `upload-app` uploads straight to Blob container `inbox` on a storage account there, with no server in between, and Unraid pulls finished files down every few minutes. Everything lives in one resource group, `upload-inbox`.
+Cloudflare Tunnel is throttled from mainland China. Azure isn't. The iOS app in `upload-app` uploads straight to Blob container `inbox` on a storage account, with no server in between, and Unraid pulls finished files down every few minutes. Everything lives in one resource group, `upload-inbox`, with one storage account per region: East Asia (Hong Kong, the default) and Japan East (Tokyo, where Azure's mainland peering edge sits). Both are live; `upload-app/app.json` decides which one the phone uses.
 
 ```
-./azure/deploy.sh
+./azure/deploy.sh                  # LOC=eastasia
+LOC=japaneast ./azure/deploy.sh
 ```
 
-Re-run anytime; it creates the account, the `inbox` and `inbox-dev` containers, and the `phone-write` SAS policy on each, then prints portal links, the rclone lines for the next step, and the container SAS to paste into `upload-app/app.json`. `./azure/destroy.sh` removes the whole resource group, uploads included, so pull them first.
+Re-run anytime; it creates the account (name remembered as `SA_<loc>` in `azure/.env`), the `inbox` and `inbox-dev` containers, and the `phone-write` SAS policy on each, then writes `azure/LINKS.<loc>.md` with portal links, the rclone lines for the next step, and the container SAS to paste into `upload-app/app.json`. `./azure/destroy.sh` removes the whole resource group, uploads included, so pull them first.
 
 ### Phone notification from Azure
 
@@ -71,9 +72,10 @@ Instant "new upload" ping, sent by Event Grid the moment a blob lands (free at t
 
 ```
 ./azure/notify.sh https://<ha>/api/webhook/upload-inbox-azure
+LOC=japaneast ./azure/notify.sh
 ```
 
-The URL is kept in `azure/.env` (gitignored, next to `SA`), so a bare `./azure/notify.sh` re-applies it. Live setup: Event Grid subscription `ha-upload` on the storage account, HA automation "Upload inbox: new upload in Azure" with webhook id `upload-inbox-azure`, notifying `mobile_app_daniels_iphone`. With Nabu Casa remote UI the webhook URL is `https://<id>.ui.nabu.casa/api/webhook/upload-inbox-azure`.
+The URL is kept in `azure/.env` (gitignored, next to `SA_<loc>`), so a bare `./azure/notify.sh` re-applies it. Each storage account gets its own `ha-upload` subscription and its own tap-to-validate. Live setup: Event Grid subscription `ha-upload` on the storage account, HA automation "Upload inbox: new upload in Azure" with webhook id `upload-inbox-azure`, notifying `mobile_app_daniels_iphone`. With Nabu Casa remote UI the webhook URL is `https://<id>.ui.nabu.casa/api/webhook/upload-inbox-azure`.
 
 Event Grid validates a new webhook with a handshake HA can't answer, so the automation turns it into a notification. Tap it within 5 minutes; that opens the validation URL and activates the subscription. Every later event is a real upload.
 
@@ -113,7 +115,7 @@ actions:
 
 ### Unraid pull
 
-The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 20 seconds. Blobs only become visible once fully committed, so no minimum age is needed; the list calls cost about $0.65 a month at Hot tier list pricing ($0.05 per 10k). Add the two lines `azure/LINKS.md` prints (`AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_KEY`) to the stack's `.env` next to `TZ`, then Compose Down / Compose Up.
+The `upload-inbox-pull` service in `docker-compose.yml` runs `rclone move` every 20 seconds. Blobs only become visible once fully committed, so no minimum age is needed; the list calls cost about $0.65 a month at Hot tier list pricing ($0.05 per 10k). Add the two lines `azure/LINKS.<loc>.md` prints (`AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_KEY`) to the stack's `.env` next to `TZ`, then Compose Down / Compose Up. The optional `AZURE_STORAGE_ACCOUNT_2` / `AZURE_STORAGE_KEY_2` pair drains a second account (the other region) in the same loop; leave it empty to pull from one.
 
 `move` deletes from Azure after a verified copy. Blobs only appear once fully committed, so nothing half-written gets pulled. Check it with `docker logs upload-inbox-pull`.
 
@@ -142,6 +144,7 @@ actions:
 
 - Cost: storage is cents, egress to your house is about $0.10/GB.
 - Retention: Azure deletes `inbox-dev` blobs after 1 day and `inbox` blobs after 14 days (a backstop for a dead pull; rclone normally clears `inbox` within minutes). Deleted blobs are soft-deleted and recoverable for 7 days in the portal.
+- Retiring a region (e.g. Hong Kong once Japan is proven): pull its blobs first, then `az storage account delete -n <SA_eastasia> -g upload-inbox`, delete the `SA_eastasia=` line from `azure/.env`, and drop its pair from the stack `.env`. The Event Grid subscription goes with the account.
 - Revoking a leaked SAS: delete the `phone-write` policy on the container (`az storage container policy delete`), change `POLICY` in `deploy.sh`, re-run it, and paste the new SAS into `app.json`. Recreating the policy under the same name would make the old SAS valid again, and a later expiry does not invalidate it either. Rotating the account key also works but breaks the Unraid pull until its `.env` is updated.
 
 ## Day to day

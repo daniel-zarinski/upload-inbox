@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
-# Provisions the Blob storage the iOS app uploads to, in East Asia (Hong Kong).
-# Everything lands in one resource group. Idempotent: re-run freely.
+# Provisions the Blob storage the iOS app uploads to. One account per region, all in one resource
+# group. LOC=eastasia (Hong Kong, default) or LOC=japaneast (Tokyo). Idempotent: re-run freely.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 RG=upload-inbox
-LOC=eastasia
+LOC=${LOC:-eastasia}
 # The app's SAS is issued against this stored access policy. To revoke a leaked SAS, delete the
 # policy, change this name, re-run, and re-issue: a SAS whose policy no longer exists is rejected.
 POLICY=phone-write
 
-# Storage account names are global; pick once, remember in .env (gitignored).
+# Storage account names are global; pick once per region, remember as SA_<loc> in .env (gitignored).
 [ -f .env ] && source .env
-SA=${SA:-uploadinbox$(od -An -N4 -tx4 /dev/urandom | tr -d " ")}
-grep -q "^SA=" .env 2>/dev/null || echo "SA=$SA" >> .env
+VAR=SA_$LOC
+SA=${!VAR:-uploadinbox$(od -An -N4 -tx4 /dev/urandom | tr -d " ")}
+grep -q "^$VAR=" .env 2>/dev/null || echo "$VAR=$SA" >> .env
 
-az group create -n $RG -l $LOC -o none
+az group show -n $RG -o none 2>/dev/null || az group create -n $RG -l $LOC -o none   # RG location is fixed at creation; accounts pick their own
 az storage account create -n $SA -g $RG -l $LOC --sku Standard_LRS --kind StorageV2 \
   --allow-blob-public-access false -o none
 KEY=$(az storage account keys list -n $SA -g $RG --query '[0].value' -o tsv)
@@ -42,16 +43,17 @@ sas() { az storage container generate-sas -n $1 --policy-name $POLICY --account-
 SAS_INBOX=$(sas inbox)
 SAS_DEV=$(sas inbox-dev)
 
-# LINKS.md is gitignored: it holds the storage key for the Unraid rclone step.
-cat > LINKS.md <<OUT
-# upload-inbox on Azure
+# LINKS.<loc>.md is gitignored: it holds the storage key for the Unraid rclone step.
+cat > LINKS.$LOC.md <<OUT
+# upload-inbox on Azure ($LOC)
 
 - [Browse uploaded blobs]($P/providers/Microsoft.Storage/storageAccounts/$SA/containersList)
 - [Storage account]($P/providers/Microsoft.Storage/storageAccounts/$SA)
 - [Resource group]($P/overview)
 - [Cost]($P/costanalysis)
 
-Unraid Compose Manager stack .env (then Compose Down / Up):
+Unraid Compose Manager stack .env (then Compose Down / Up). For a second account use the
+AZURE_STORAGE_ACCOUNT_2 / AZURE_STORAGE_KEY_2 slot instead:
 
     AZURE_STORAGE_ACCOUNT=$SA
     AZURE_STORAGE_KEY=$KEY
@@ -65,4 +67,4 @@ Container SAS for upload-app/app.json (accountUrl https://$SA.blob.core.windows.
     inbox:     $SAS_INBOX
     inbox-dev: $SAS_DEV
 OUT
-cat LINKS.md
+cat LINKS.$LOC.md
